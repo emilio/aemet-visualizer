@@ -5,7 +5,34 @@
 use serde::{de, ser};
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Meters(pub u32);
+pub struct Meters(pub f32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Celsius(pub f32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Mm(pub f32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TenthsOfMm(pub f32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Percentage(pub f32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TenthsOfHectoPascal(pub f32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Days(pub u32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Hours(pub f32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Kilometers(pub f32);
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct KilometersPerHour(pub f32);
 
 #[derive(Debug)]
 pub enum LongitudeDirection {
@@ -129,6 +156,39 @@ pub struct Station {
     pub datum: String,
 }
 
+/// "Formato F1", with the unit of the statistical data.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct F1<Data> {
+    #[serde(rename = "Indicativo")]
+    pub station_id: String,
+    #[serde(rename = "enero")]
+    pub january: Option<Data>,
+    #[serde(rename = "febrero")]
+    pub february: Option<Data>,
+    #[serde(rename = "marzo")]
+    pub march: Option<Data>,
+    #[serde(rename = "abril")]
+    pub april: Option<Data>,
+    #[serde(rename = "mayo")]
+    pub may: Option<Data>,
+    #[serde(rename = "junio")]
+    pub june: Option<Data>,
+    #[serde(rename = "julio")]
+    pub july: Option<Data>,
+    #[serde(rename = "agosto")]
+    pub august: Option<Data>,
+    #[serde(rename = "septiembre")]
+    pub september: Option<Data>,
+    #[serde(rename = "octubre")]
+    pub october: Option<Data>,
+    #[serde(rename = "noviembre")]
+    pub november: Option<Data>,
+    #[serde(rename = "diciembre")]
+    pub december: Option<Data>,
+    #[serde(rename = "anual")]
+    pub yearly: Option<Data>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,5 +221,78 @@ mod tests {
     #[test]
     fn test_station() {
         read_csv_file::<Station>("Maestro_Climatologico_{}.csv");
+    }
+
+    // http://www.aemet.es/documentos/es/datos_abiertos/Estadisticas/Estadisticas_meteorofenologicas/evmf_parametros.pdf
+    #[test]
+    fn monthly_formats() {
+        // Temperature
+        read_csv_file::<F1<Celsius>>("mensuales/TM_MES_{}.csv");
+        read_csv_file::<F1<Celsius>>("mensuales/TM_MAX_{}.csv");
+        read_csv_file::<F1<Celsius>>("mensuales/TM_MIN_{}.csv");
+        // read_csv_file::<F2<Celsius>>("mensuales/TA_MAX_{}.csv");
+        // read_csv_file::<F2<Celsius>>("mensuales/TA_MIN_{}.csv");
+        read_csv_file::<F1<Celsius>>("mensuales/TS_MIN_{}.csv");
+        read_csv_file::<F1<Celsius>>("mensuales/TI_MAX_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NT_30_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NT_00_{}.csv");
+
+        // Rain
+        read_csv_file::<F1<Mm>>("mensuales/P_MES_{}.csv");
+        // read_csv_file::<F2<Mm>>("mensuales/P_MAX_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NP_001_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NP_010_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NP_100_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NP_300_{}.csv");
+
+        // Humidity
+        read_csv_file::<F1<Percentage>>("mensuales/HR_{}.csv");
+        read_csv_file::<F1<TenthsOfHectoPascal>>("mensuales/E_{}.csv");
+
+        // Days of rain/snow/storm/fog/...
+        read_csv_file::<F1<Days>>("mensuales/N_LLU_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/N_NIE_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/N_GRA_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/N_TOR_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/N_FOG_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/N_DES_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/N_NUB_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/N_CUB_{}.csv");
+
+        // Hours of sun.
+        read_csv_file::<F1<Hours>>("mensuales/INSO_{}.csv");
+        read_csv_file::<F1<Percentage>>("mensuales/P_SOL_{}.csv");
+        // Global radiation
+        // TODO: What's this unit even? decenas the Kj.m^{-2}
+        // read_csv_file::<F1<XXX>>("mensuales/GLO_{}.csv");
+
+        // Evaporation
+        read_csv_file::<F1<TenthsOfMm>>("mensuales/EVAP_{}.csv");
+
+        read_csv_file::<F1<Kilometers>>("mensuales/W_REC_{}.csv");
+        // read_csv_file::<F3>("mensuales/W_RACHA_{}.csv");
+
+        // Wind speed greater than.
+        read_csv_file::<F1<Days>>("mensuales/NW_55_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NW_91_{}.csv");
+
+        // Average wind speed.
+        read_csv_file::<F1<KilometersPerHour>>("mensuales/W_MED_{}.csv");
+
+        // Pressure.
+        read_csv_file::<F1<TenthsOfHectoPascal>>("mensuales/Q_MED_{}.csv");
+        // read_csv_file::<F2<TenthsOfHectoPascal>>("mensuales/Q_MAX_{}.csv");
+        // read_csv_file::<F2<TenthsOfHectoPascal>>("mensuales/Q_MIN_{}.csv");
+        read_csv_file::<F1<TenthsOfHectoPascal>>("mensuales/Q_MAR_{}.csv");
+
+        // Temperature under sea level.
+        read_csv_file::<F1<Celsius>>("mensuales/TS_10_{}.csv");
+        read_csv_file::<F1<Celsius>>("mensuales/TS_20_{}.csv");
+        read_csv_file::<F1<Celsius>>("mensuales/TS_50_{}.csv");
+
+        // Visibility.
+        read_csv_file::<F1<Days>>("mensuales/NV_0050_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NV_0100_{}.csv");
+        read_csv_file::<F1<Days>>("mensuales/NV_1000_{}.csv");
     }
 }
