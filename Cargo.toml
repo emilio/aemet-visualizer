@@ -1,8 +1,8 @@
 [package]
-name = "meteo-analyzer"
+name = "aemet-visualizer"
 version = "0.1.0"
 authors = ["Emilio Cobos Álvarez <emilio@crisal.io>"]
-description = "Simple parsers for AEMET's data"
+description = "Simple visualizer for AEMET's data"
 edition = "2018"
 license-file = "LICENSE"
 

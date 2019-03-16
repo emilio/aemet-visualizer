@@ -189,110 +189,195 @@ pub struct F1<Data> {
     pub yearly: Option<Data>,
 }
 
+/// The yearly data for all the meteorological stations.
+///
+/// http://www.aemet.es/documentos/es/datos_abiertos/Estadisticas/Estadisticas_meteorofenologicas/evmf_parametros.pdf
+#[derive(Debug, Deserialize, Serialize)]
+pub struct YearlyData {
+    pub year: u32,
+
+    pub stations: Vec<Station>,
+
+    pub average_temperature: Vec<F1<Celsius>>,
+    pub average_max_temperature: Vec<F1<Celsius>>,
+    pub average_min_temperature: Vec<F1<Celsius>>,
+
+    // pub absolute_max_temperature: F2<Celsius>,
+    // pub absolute_min_temperature: F2<Celsius>,
+
+    pub higher_min_temperature: Vec<F1<Celsius>>,
+    pub lower_max_temperature: Vec<F1<Celsius>>,
+
+    pub number_of_days_gteq_30_celsius: Vec<F1<Days>>,
+    pub number_of_days_lteq_0_celsius: Vec<F1<Days>>,
+
+    pub total_rain: Vec<F1<Mm>>,
+    // pub max_rain: Vec<F2<Mm>>,
+
+    pub days_with_appreciable_rain: Vec<F1<Days>>,
+    pub days_with_rain_gteq_1_mm: Vec<F1<Days>>,
+    pub days_with_rain_gteq_10_mm: Vec<F1<Days>>,
+    pub days_with_rain_gteq_30_mm: Vec<F1<Days>>,
+
+    pub average_relative_humidity: Vec<F1<Percentage>>,
+    pub average_vapor_tension: Vec<F1<TenthsOfHectoPascal>>,
+
+    pub days_of_rain: Vec<F1<Days>>,
+    pub days_of_snow: Vec<F1<Days>>,
+    pub days_of_hail: Vec<F1<Days>>,
+    pub days_of_storm: Vec<F1<Days>>,
+    pub days_of_fog: Vec<F1<Days>>,
+    pub clear_days: Vec<F1<Days>>,
+    pub cloudy_days: Vec<F1<Days>>,
+    pub covered_days: Vec<F1<Days>>,
+
+    pub hours_of_sun: Vec<F1<Hours>>,
+    pub average_percentage_against_theoric_insolation: Vec<F1<Percentage>>,
+
+    // TODO: What's this unit even? Tenths of Kj.m^{-2}
+    // pub global_radiation: Vec<F1<XXX>>,
+
+    pub evaporation: Vec<F1<TenthsOfMm>>,
+
+    pub average_distance: Vec<F1<Kilometers>>,
+
+    // pub biggest_gust_of_wind: Vec<F3>,
+
+    pub days_with_wind_greater_than_55_km_per_hour: Vec<F1<Days>>,
+    pub days_with_wind_greater_than_91_km_per_hour: Vec<F1<Days>>,
+
+    pub average_wind_speed: Vec<F1<KilometersPerHour>>,
+
+    pub average_pressure: Vec<F1<TenthsOfHectoPascal>>,
+    // pub max_pressure: Vec<F2<TenthsOfHectoPascal>>,
+    // pub min_pressure: Vec<F2<TenthsOfHectoPascal>>,
+    pub average_pressure_sea_level: Vec<F1<TenthsOfHectoPascal>>,
+
+    pub average_temperature_under_10_cm: Vec<F1<Celsius>>,
+    pub average_temperature_under_20_cm: Vec<F1<Celsius>>,
+    pub average_temperature_under_50_cm: Vec<F1<Celsius>>,
+
+    pub days_with_visibility_lt_50_m: Vec<F1<Days>>,
+    pub days_with_visibility_gteq_50_m_lt_100_m: Vec<F1<Days>>,
+    pub days_with_visibility_gteq_100_m_lt_1000_m: Vec<F1<Days>>,
+}
+
+
+impl YearlyData {
+    /// Reads the yearly data from a given csv directory.
+    ///
+    /// This panics on error, assuming that data is under control.
+    pub fn from_csv(directory: &std::path::Path, year: u32) -> Self {
+        use std::{fs, io};
+
+        fn read_csv_file<Record>(path: &std::path::Path) -> Vec<Record>
+        where
+            Record: for<'de> serde::de::Deserialize<'de>,
+        {
+            use csv;
+
+            let file = match fs::File::open(&path) {
+                Ok(file) => file,
+                Err(e) => panic!("Could not open {}: {:?}", path.display(), e),
+            };
+            let reader = io::BufReader::new(file);
+            let mut reader =
+                csv::ReaderBuilder::new().delimiter(b';').from_reader(reader);
+            reader.deserialize().map(|record| record.unwrap()).collect()
+        }
+
+        macro_rules! read_monthly {
+            ($name: expr) => {{
+                let path = directory
+                    .join("mensuales")
+                    .join(format!("{}_{}.csv", $name, year));
+                read_csv_file(&path)
+            }}
+        };
+
+        Self {
+            year,
+            stations: read_csv_file(&directory.join(format!("Maestro_Climatologico_{}.csv", year))),
+            average_temperature: read_monthly!("TM_MES"),
+            average_max_temperature: read_monthly!("TM_MAX"),
+            average_min_temperature: read_monthly!("TM_MIN"),
+            higher_min_temperature: read_monthly!("TS_MIN"),
+            lower_max_temperature: read_monthly!("TI_MAX"),
+            number_of_days_gteq_30_celsius: read_monthly!("NT_30"),
+            number_of_days_lteq_0_celsius: read_monthly!("NT_00"),
+            total_rain: read_monthly!("P_MES"),
+            days_with_appreciable_rain: read_monthly!("NP_001"),
+            days_with_rain_gteq_1_mm: read_monthly!("NP_010"),
+            days_with_rain_gteq_10_mm: read_monthly!("NP_100"),
+            days_with_rain_gteq_30_mm: read_monthly!("NP_300"),
+
+            average_relative_humidity: read_monthly!("HR"),
+            average_vapor_tension: read_monthly!("E"),
+
+            days_of_rain: read_monthly!("N_LLU"),
+            days_of_snow: read_monthly!("N_NIE"),
+            days_of_hail: read_monthly!("N_GRA"),
+            days_of_storm: read_monthly!("N_TOR"),
+            days_of_fog: read_monthly!("N_FOG"),
+            clear_days: read_monthly!("N_DES"),
+            cloudy_days: read_monthly!("N_NUB"),
+            covered_days: read_monthly!("N_CUB"),
+
+            hours_of_sun: read_monthly!("INSO"),
+            average_percentage_against_theoric_insolation: read_monthly!("P_SOL"),
+
+            evaporation: read_monthly!("EVAP"),
+            average_distance: read_monthly!("W_REC"),
+
+            days_with_wind_greater_than_55_km_per_hour: read_monthly!("NW_55"),
+            days_with_wind_greater_than_91_km_per_hour: read_monthly!("NW_91"),
+
+            average_wind_speed: read_monthly!("W_MED"),
+
+            average_pressure: read_monthly!("Q_MED"),
+            average_pressure_sea_level: read_monthly!("Q_MAR"),
+
+            average_temperature_under_10_cm: read_monthly!("TS_10"),
+            average_temperature_under_20_cm: read_monthly!("TS_20"),
+            average_temperature_under_50_cm: read_monthly!("TS_50"),
+
+            days_with_visibility_lt_50_m: read_monthly!("NV_0050"),
+            days_with_visibility_gteq_50_m_lt_100_m: read_monthly!("NV_0100"),
+            days_with_visibility_gteq_100_m_lt_1000_m: read_monthly!("NV_1000"),
+        }
+    }
+
+    /// Gets all the data from the in-repo data.
+    pub fn all_from_manifest_dir() -> Vec<Self> {
+        use std::path::Path;
+
+        macro_rules! yearly_data {
+            ($year:tt) => {{
+                YearlyData::from_csv(
+                    Path::new(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/data/",
+                        stringify!($year)
+                    )),
+                    $year,
+                )
+            }}
+        }
+
+        vec![
+            yearly_data!(2016),
+            yearly_data!(2017),
+            yearly_data!(2018),
+        ]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn read_csv_file<Record>(path_template: &str)
-    where
-        Record: for<'de> serde::de::Deserialize<'de>,
-        Record: std::fmt::Debug,
-    {
-        use csv;
-        use std::fs;
-
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/data");
-        for year in &["2016", "2017", "2018"] {
-            let path = format!("{}/{}/{}", path, year, path_template.replace("{}", year));
-            let file = match fs::File::open(&path) {
-                Ok(file) => file,
-                Err(e) => panic!("Could not open {}: {:?}", path, e),
-            };
-            let reader = std::io::BufReader::new(file);
-            let mut reader =
-                csv::ReaderBuilder::new().delimiter(b';').from_reader(reader);
-            for record in reader.deserialize() {
-                let record: Record = record.unwrap();
-                println!("{:?}", record);
-            }
-        }
-    }
-
     #[test]
-    fn test_station() {
-        read_csv_file::<Station>("Maestro_Climatologico_{}.csv");
-    }
-
-    // http://www.aemet.es/documentos/es/datos_abiertos/Estadisticas/Estadisticas_meteorofenologicas/evmf_parametros.pdf
-    #[test]
-    fn monthly_formats() {
-        // Temperature
-        read_csv_file::<F1<Celsius>>("mensuales/TM_MES_{}.csv");
-        read_csv_file::<F1<Celsius>>("mensuales/TM_MAX_{}.csv");
-        read_csv_file::<F1<Celsius>>("mensuales/TM_MIN_{}.csv");
-        // read_csv_file::<F2<Celsius>>("mensuales/TA_MAX_{}.csv");
-        // read_csv_file::<F2<Celsius>>("mensuales/TA_MIN_{}.csv");
-        read_csv_file::<F1<Celsius>>("mensuales/TS_MIN_{}.csv");
-        read_csv_file::<F1<Celsius>>("mensuales/TI_MAX_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NT_30_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NT_00_{}.csv");
-
-        // Rain
-        read_csv_file::<F1<Mm>>("mensuales/P_MES_{}.csv");
-        // read_csv_file::<F2<Mm>>("mensuales/P_MAX_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NP_001_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NP_010_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NP_100_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NP_300_{}.csv");
-
-        // Humidity
-        read_csv_file::<F1<Percentage>>("mensuales/HR_{}.csv");
-        read_csv_file::<F1<TenthsOfHectoPascal>>("mensuales/E_{}.csv");
-
-        // Days of rain/snow/storm/fog/...
-        read_csv_file::<F1<Days>>("mensuales/N_LLU_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/N_NIE_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/N_GRA_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/N_TOR_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/N_FOG_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/N_DES_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/N_NUB_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/N_CUB_{}.csv");
-
-        // Hours of sun.
-        read_csv_file::<F1<Hours>>("mensuales/INSO_{}.csv");
-        read_csv_file::<F1<Percentage>>("mensuales/P_SOL_{}.csv");
-        // Global radiation
-        // TODO: What's this unit even? decenas the Kj.m^{-2}
-        // read_csv_file::<F1<XXX>>("mensuales/GLO_{}.csv");
-
-        // Evaporation
-        read_csv_file::<F1<TenthsOfMm>>("mensuales/EVAP_{}.csv");
-
-        read_csv_file::<F1<Kilometers>>("mensuales/W_REC_{}.csv");
-        // read_csv_file::<F3>("mensuales/W_RACHA_{}.csv");
-
-        // Wind speed greater than.
-        read_csv_file::<F1<Days>>("mensuales/NW_55_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NW_91_{}.csv");
-
-        // Average wind speed.
-        read_csv_file::<F1<KilometersPerHour>>("mensuales/W_MED_{}.csv");
-
-        // Pressure.
-        read_csv_file::<F1<TenthsOfHectoPascal>>("mensuales/Q_MED_{}.csv");
-        // read_csv_file::<F2<TenthsOfHectoPascal>>("mensuales/Q_MAX_{}.csv");
-        // read_csv_file::<F2<TenthsOfHectoPascal>>("mensuales/Q_MIN_{}.csv");
-        read_csv_file::<F1<TenthsOfHectoPascal>>("mensuales/Q_MAR_{}.csv");
-
-        // Temperature under sea level.
-        read_csv_file::<F1<Celsius>>("mensuales/TS_10_{}.csv");
-        read_csv_file::<F1<Celsius>>("mensuales/TS_20_{}.csv");
-        read_csv_file::<F1<Celsius>>("mensuales/TS_50_{}.csv");
-
-        // Visibility.
-        read_csv_file::<F1<Days>>("mensuales/NV_0050_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NV_0100_{}.csv");
-        read_csv_file::<F1<Days>>("mensuales/NV_1000_{}.csv");
+    fn it_works() {
+        YearlyData::all_from_manifest_dir();
     }
 }
