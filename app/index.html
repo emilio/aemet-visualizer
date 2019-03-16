@@ -1,9 +1,17 @@
 <!doctype html>
 <title>AEMET data visualizer</title>
-<svg id="lineChartSVG" class="lineChart--svg">
-</svg>
+<script src="static/charts.js"></script>
+<div id="controls">
+</div>
+<div id="charts"></div>
 <script>
 (async function() {
-  let data = await fetch("static/data.json");
+  const response = await fetch("static/data.json");
+  const data = await response.json();
+  new Charts(
+    document.getElementById("charts"),
+    document.getElementById("controls"),
+    data
+  );
 })();
 </script>
