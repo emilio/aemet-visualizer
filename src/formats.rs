@@ -138,54 +138,54 @@ impl<'de> de::Deserialize<'de> for Latitude {
 /// "Maestro climatológico"
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Station {
-    #[serde(rename = "INDICATIVO")]
+    #[serde(alias = "INDICATIVO")]
     pub id: String,
-    #[serde(rename = "NOMBRE")]
+    #[serde(alias = "NOMBRE")]
     pub name: String,
-    #[serde(rename = "PROVINCIA")]
+    #[serde(alias = "PROVINCIA")]
     pub province: String,
-    #[serde(rename = "MUNICIPIO")]
+    #[serde(alias = "MUNICIPIO")]
     pub city: String,
-    #[serde(rename = "ALTITUD")]
+    #[serde(alias = "ALTITUD")]
     pub altitude: Meters,
-    #[serde(rename = "LONGITUD")]
+    #[serde(alias = "LONGITUD")]
     pub longitude: Longitude,
-    #[serde(rename = "LATITUD")]
+    #[serde(alias = "LATITUD")]
     pub latitude: Latitude,
-    #[serde(rename = "DATUM")]
+    #[serde(alias = "DATUM")]
     pub datum: String,
 }
 
 /// "Formato F1", with the unit of the statistical data.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct F1<Data> {
-    #[serde(rename = "Indicativo")]
+    #[serde(alias = "Indicativo")]
     pub station_id: String,
-    #[serde(rename = "enero")]
+    #[serde(alias = "enero")]
     pub january: Option<Data>,
-    #[serde(rename = "febrero")]
+    #[serde(alias = "febrero")]
     pub february: Option<Data>,
-    #[serde(rename = "marzo")]
+    #[serde(alias = "marzo")]
     pub march: Option<Data>,
-    #[serde(rename = "abril")]
+    #[serde(alias = "abril")]
     pub april: Option<Data>,
-    #[serde(rename = "mayo")]
+    #[serde(alias = "mayo")]
     pub may: Option<Data>,
-    #[serde(rename = "junio")]
+    #[serde(alias = "junio")]
     pub june: Option<Data>,
-    #[serde(rename = "julio")]
+    #[serde(alias = "julio")]
     pub july: Option<Data>,
-    #[serde(rename = "agosto")]
+    #[serde(alias = "agosto")]
     pub august: Option<Data>,
-    #[serde(rename = "septiembre")]
+    #[serde(alias = "septiembre")]
     pub september: Option<Data>,
-    #[serde(rename = "octubre")]
+    #[serde(alias = "octubre")]
     pub october: Option<Data>,
-    #[serde(rename = "noviembre")]
+    #[serde(alias = "noviembre")]
     pub november: Option<Data>,
-    #[serde(rename = "diciembre")]
+    #[serde(alias = "diciembre")]
     pub december: Option<Data>,
-    #[serde(rename = "anual")]
+    #[serde(alias = "anual")]
     pub yearly: Option<Data>,
 }
 

@@ -2,11 +2,12 @@
 name = "aemet-visualizer"
 version = "0.1.0"
 authors = ["Emilio Cobos Álvarez <emilio@crisal.io>"]
-description = "Simple visualizer for AEMET's data"
+description = "Simple visualizer web app for AEMET's data"
 edition = "2018"
 license-file = "LICENSE"
 
-[dependencies]
+[build-dependencies]
 csv = "1"
 serde = "1"
 serde_derive = "1"
+serde_json = "1"
