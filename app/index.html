@@ -1,0 +1,9 @@
+<!doctype html>
+<title>AEMET data visualizer</title>
+<svg id="lineChartSVG" class="lineChart--svg">
+</svg>
+<script>
+(async function() {
+  let data = await fetch("static/data.json");
+})();
+</script>

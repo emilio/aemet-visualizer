@@ -1,5 +1,5 @@
 [[package]]
-name = "aemet-visualizer"
+name = "aemet-data"
 version = "0.1.0"
 dependencies = [
  "csv 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
