@@ -1,0 +1,12 @@
+[package]
+name = "meteo-analyzer"
+version = "0.1.0"
+authors = ["Emilio Cobos Álvarez <emilio@crisal.io>"]
+description = "Simple parsers for AEMET's data"
+edition = "2018"
+license-file = "LICENSE"
+
+[dependencies]
+csv = "1"
+serde = "1"
+serde_derive = "1"
