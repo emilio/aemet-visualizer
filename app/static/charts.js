@@ -1,5 +1,7 @@
 (function() {
 
+const kSvgNs = "http://www.w3.org/2000/svg";
+
 const kMonths = [
   "january",
   "february",
@@ -13,6 +15,18 @@ const kMonths = [
   "october",
   "november",
   "december",
+];
+
+
+// TODO: Expand + tune
+const kLineColors = [
+  "red",
+  "green",
+  "blue",
+  "yellow",
+  "orange",
+  "purple",
+  "fuchsia",
 ];
 
 const kKnownMetrics = {
@@ -66,7 +80,7 @@ const kKnownMetrics = {
     unit: "Days",
   },
   average_relative_humidity: {
-    pretty: "Average relative humidity (%)",
+    pretty: "Average relative humidity",
     unit: "%",
   },
   average_vapor_tension: {
@@ -190,6 +204,15 @@ window.Charts = class Charts {
     this.chartContainer = chartContainer;
     this.controls = controls;
     this.data = data;
+    this.width = 1200;
+    this.height = 600;
+    this.axisPadding = {
+      left: 40,
+      bottom: 40,
+      right: 0,
+      top: 20,
+    }
+    this.dotSize = 5;
     this.stations = {};
     this.charts = {};
     this.setupStations();
@@ -208,11 +231,27 @@ window.Charts = class Charts {
       this.rebuildChartForUnit(unit);
   }
 
+  checkboxChanged(e) {
+    if (e.target.checked)
+      e.target.parentNode.classList.add("checked")
+    else
+      e.target.parentNode.classList.remove("checked")
+  }
+
   selectedYearChanged(e) {
+    this.checkboxChanged(e);
     this.rebuildAllCharts();
   }
 
+  selectedMetricChanged(e) {
+    this.checkboxChanged(e);
+    for (const unit in kKnownUnits)
+      if (kKnownUnits[unit].includes(e.target.value))
+        this.rebuildChartForUnit(unit);
+  }
+
   selectedStationChanged(e) {
+    this.checkboxChanged(e);
     this.rebuildAllCharts();
   }
 
@@ -226,6 +265,7 @@ window.Charts = class Charts {
       input.checked = true;
       input.addEventListener("change", e => this.selectedYearChanged(e));
       label.appendChild(input);
+      label.classList.add("checked");
       label.appendChild(document.createTextNode(data.year));
       yearlyControls.appendChild(label);
     }
@@ -238,6 +278,7 @@ window.Charts = class Charts {
       input.type = "checkbox";
       input.checked = true;
       input.addEventListener("change", e => this.selectedStationChanged(e));
+      label.classList.add("checked");
       label.appendChild(input);
       label.appendChild(document.createTextNode(`${station.id} - ${station.name} (${station.city}, ${station.province})`));
       label.title = `${station.altitude} - ${station.latitude} - ${station.longitude}`;
@@ -249,6 +290,43 @@ window.Charts = class Charts {
 
     for (const unit in kKnownUnits)
       this.buildControlsAndChartsForUnit(unit);
+
+    const titlePopup = document.createElement("title-popup");
+    titlePopup.style.display = "none";
+    titlePopup.style.opacity = "0";
+    this.chartContainer.appendChild(titlePopup);
+
+    let timeoutId = null;
+    this.chartContainer.addEventListener("mousemove", e => {
+      if (!e.target.hasAttribute("title")) {
+        if (!timeoutId) {
+          timeoutId = setTimeout(function() {
+            timeoutId = null;
+            titlePopup.style.opacity = "0";
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (titlePopup.style.opacity == "0")
+                  titlePopup.style.display = "none";
+              })
+            });
+          }, 800);
+        }
+        return;
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      const title = e.target.getAttribute("title");
+      if (titlePopup.style.display !== "none" && titlePopup.textContent == title)
+        return;
+      titlePopup.style.display = "block";
+      titlePopup.textContent = title;
+      titlePopup.style.left = e.clientX + "px";
+      titlePopup.style.top = e.clientY + "px";
+      getComputedStyle(titlePopup).display; // Trigger the opacity transition below.
+      titlePopup.style.opacity = "1";
+    });
   }
 
   buildControlsAndChartsForUnit(unit) {
@@ -264,6 +342,7 @@ window.Charts = class Charts {
       input.type = "checkbox";
       input.checked = true;
       label.appendChild(input);
+      label.classList.add("checked");
       input.addEventListener("change", e => this.selectedMetricChanged(e));
       label.appendChild(document.createTextNode(`${metric.pretty} (${metric.unit})`));
       controls.appendChild(label);
@@ -275,6 +354,7 @@ window.Charts = class Charts {
     container.appendChild(chart);
 
     this.rebuildChartForUnit(unit);
+    this.chartContainer.appendChild(container);
   }
 
   enabledYears() {
@@ -318,36 +398,168 @@ window.Charts = class Charts {
 
     let max = -Infinity;
     let min = Infinity;
+
+    // Special-case for percentages.
+    if (unit == "%") {
+      min = 0;
+      max = 100;
+    }
+
     const lines = {};
-    for (const data of this.data) {
-      if (!enabledYears.has(data.year))
-        continue;
-      for (const m in data) {
-        if (!enabledMetrics.has(m))
+    {
+      let currentYear = 0;
+      for (const data of this.data) {
+        if (!enabledYears.has(data.year))
           continue;
-        lines[m] = {};
-        for (const yearData of data[m]) {
-          const station = yearData.station_id;
-          if (!enabledStations.has(station))
+        for (const m in data) {
+          if (!enabledMetrics.has(m))
             continue;
-          for (const month of kMonths) {
-            const value = yearData[month];
-            if (!value)
+          if (!lines[m])
+            lines[m] = {};
+          for (const yearData of data[m]) {
+            const station = yearData.station_id;
+            if (!enabledStations.has(station))
               continue;
-            min = Math.min(min, value);
-            max = Math.max(max, value);
-            if (!lines[m][station])
-              lines[m][station] = [];
-            lines[m][station].push({
-              year: data.year,
-              month: month,
-              value: value,
-            });
+            for (let currentMonth = 0; currentMonth < kMonths.length; ++currentMonth) {
+              const month = kMonths[currentMonth];
+              let value = yearData[month];
+              if (!value)
+                continue;
+              if (kKnownMetrics[m].multiplier)
+                value *= kKnownMetrics[m].multiplier;
+              min = Math.min(min, value);
+              max = Math.max(max, value);
+              if (!lines[m][station])
+                lines[m][station] = [];
+              lines[m][station].push({
+                year: currentYear,
+                month: currentMonth,
+                value: value,
+              });
+            }
           }
         }
+        currentYear++;
       }
     }
-    console.log(lines);
+
+    const svg = document.createElementNS(kSvgNs, "svg");
+    svg.setAttribute("width", this.width);
+    svg.setAttribute("height", this.height);
+
+    // Add two axes.
+    {
+      const xAxis = document.createElementNS(kSvgNs, "g");
+      xAxis.classList.add("x-axis");
+
+      const xLine = document.createElementNS(kSvgNs, "line");
+      xLine.setAttribute("x1", this.axisPadding.left)
+      xLine.setAttribute("x2", this.width - this.axisPadding.right)
+
+      xLine.setAttribute("y1", this.height - this.axisPadding.bottom)
+      xLine.setAttribute("y2", this.height - this.axisPadding.bottom)
+
+      xAxis.appendChild(xLine);
+
+      const yAxis = document.createElementNS(kSvgNs, "g");
+      yAxis.classList.add("y-axis");
+
+      const yLine = document.createElementNS(kSvgNs, "line");
+      yLine.setAttribute("x1", this.axisPadding.left)
+      yLine.setAttribute("x2", this.axisPadding.left)
+
+      yLine.setAttribute("y1", this.axisPadding.top);
+      yLine.setAttribute("y2", this.height - this.axisPadding.bottom)
+
+      yAxis.appendChild(yLine);
+
+      svg.appendChild(xAxis);
+      svg.appendChild(yAxis);
+    }
+
+    const availWidth = this.width - this.axisPadding.left - this.axisPadding.right;
+    const availHeight = this.height - this.axisPadding.top - this.axisPadding.bottom;
+    const yRange = max - min;
+    const sizePerYear = availWidth / enabledYears.size;
+    const sizePerMonth = sizePerYear / kMonths.length;
+
+    {
+      // The x axis labels.
+      const labels = document.createElementNS(kSvgNs, "g");
+      labels.classList.add("x-labels");
+
+      let consumedSize = this.axisPadding.left;
+
+      let appendLabel = content => {
+        const text = document.createElementNS(kSvgNs, "text");
+        text.setAttribute("y", this.height - this.axisPadding.bottom / 2);
+        text.setAttribute("x", consumedSize);
+        text.appendChild(document.createTextNode(content));
+        labels.appendChild(text);
+        consumedSize += sizePerMonth;
+      };
+
+      // XXX: Is Set iteration order well-defined enough?
+      // XXX: What if years are not contiguous? What does that even mean?
+      let yearsSeen = 0;
+      for (const year of enabledYears)
+        for (let i = 0; i < kMonths.length; ++i)
+          appendLabel(i == 0 ? year : kMonths[i].substring(0, 3));
+      svg.appendChild(labels);
+    }
+
+    {
+      const labels = document.createElementNS(kSvgNs, "g");
+      labels.classList.add("y-labels");
+
+      const maxLabel = document.createElementNS(kSvgNs, "text");
+      maxLabel.setAttribute("y", this.axisPadding.top);
+      maxLabel.setAttribute("x", 0);
+      maxLabel.appendChild(document.createTextNode(max.toFixed(2)));
+      labels.appendChild(maxLabel);
+
+      const minLabel = document.createElementNS(kSvgNs, "text");
+      minLabel.setAttribute("y", this.height - this.axisPadding.bottom);
+      minLabel.setAttribute("x", 0);
+      minLabel.appendChild(document.createTextNode(min.toFixed(2)));
+      labels.appendChild(minLabel);
+
+      // TODO: y axis labels in the middle?
+      svg.appendChild(labels);
+    }
+
+    {
+      const pointContainer = document.createElementNS(kSvgNs, "g");
+      pointContainer.classList.add("points");
+
+      let lineIndex = 0;
+      for (const metric in lines) {
+        for (const station in lines[metric]) {
+          const points = lines[metric][station];
+          const line = document.createElementNS(kSvgNs, "polyline");
+          const pointsAttr = [];
+          const color = kLineColors[lineIndex++ % kLineColors.length];
+          for (const point of points) {
+            const circle = document.createElementNS(kSvgNs, "circle");
+            const x = this.axisPadding.left + point.year * sizePerYear + point.month * sizePerMonth;
+            const y = this.axisPadding.top + (1 - ((point.value - min) / yRange)) * availHeight;
+            circle.style.color = color;
+            circle.setAttribute("cx", x);
+            circle.setAttribute("cy", y);
+            circle.setAttribute("r", this.dotSize / 2);
+            circle.setAttribute("title", `${kKnownMetrics[metric].pretty} - ${this.stations[station].name} - ${kMonths[point.month]} - ${point.value}`);
+            pointsAttr.push(`${x},${y}`);
+            pointContainer.appendChild(circle);
+          }
+          line.setAttribute("points", pointsAttr.join(" "));
+          line.setAttribute("title", `${kKnownMetrics[metric].pretty} - ${this.stations[station].name}`);
+          line.style.color = color;
+          pointContainer.insertBefore(line, pointContainer.firstChild);
+        }
+      }
+      svg.appendChild(pointContainer);
+    }
+    chart.appendChild(svg);
   }
 };
 

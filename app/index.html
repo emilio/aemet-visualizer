@@ -1,5 +1,84 @@
 <!doctype html>
 <title>AEMET data visualizer</title>
+<style>
+  html, body {
+    margin: 0;
+  }
+  :root {
+    font-family: sans-serif;
+    font-size: .8em;
+  }
+  yearly-controls::before,
+  station-controls::before {
+    font-size: 1.5em;
+    content: "Yearly controls";
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid grey;
+    display: block;
+  }
+  station-controls::before {
+    content: "Station controls";
+  }
+  yearly-controls, station-controls, metric-controls {
+    display: block;
+    padding: 10px;
+  }
+  chart-container, chart {
+    display: block;
+    width: 1200px;
+    margin: 1em auto;
+  }
+  title-popup {
+    position: fixed;
+    background: rgba(0, 0, 0, .7);
+    color: white;
+    transition: .3s opacity;
+    padding: 3px;
+    border-radius: 3px;
+  }
+  polyline {
+    fill: none;
+    stroke: currentcolor;
+  }
+  circle {
+    fill: currentcolor;
+    stroke: none;
+  }
+  label {
+    display: inline-block;
+    padding: 3px;
+    margin: 3px;
+    border: 1px solid purple;
+    border-radius: 3px;
+    color: purple;
+    cursor: pointer;
+  }
+  label.checked, label:hover {
+    background: purple;
+    color: white;
+  }
+  label:hover {
+    background: #620162;
+  }
+  label input[type="checkbox"] {
+    visibility: hidden;
+    position: absolute;
+  }
+  .x-axis line,
+  .y-axis line {
+    stroke-width: 1px;
+    stroke: lightgrey;
+  }
+  .x-labels text {
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+  .y-labels text {
+    text-anchor: start;
+    dominant-baseline: middle;
+  }
+</style>
 <script src="static/charts.js"></script>
 <div id="controls">
 </div>
