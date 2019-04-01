@@ -8,6 +8,7 @@
     font-family: sans-serif;
     font-size: .8em;
   }
+  mode-controls::before,
   yearly-controls::before,
   station-controls::before {
     font-size: 1.5em;
@@ -17,10 +18,13 @@
     border-bottom: 1px solid grey;
     display: block;
   }
+  mode-controls::before {
+    content: "Mode controls";
+  }
   station-controls::before {
     content: "Station controls";
   }
-  yearly-controls, station-controls, metric-controls {
+  mode-controls, yearly-controls, station-controls, metric-controls {
     display: block;
     padding: 10px;
   }
@@ -45,7 +49,8 @@
     fill: currentcolor;
     stroke: none;
   }
-  label {
+  label, button {
+    font: inherit;
     display: inline-block;
     padding: 3px;
     margin: 3px;
@@ -61,7 +66,8 @@
   label:hover {
     background: #620162;
   }
-  label input[type="checkbox"] {
+  label input[type="checkbox"],
+  label input[type="radio"] {
     visibility: hidden;
     position: absolute;
   }
@@ -78,6 +84,25 @@
     text-anchor: start;
     dominant-baseline: middle;
   }
+  button {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: #039f7e;
+    border-color: #039f7e;
+    color: white;
+  }
+  button:focus {
+    background: #039f7e;
+    border-color: #039f7e;
+  }
+  button:hover, button:active {
+    background: #01785f;
+    border-color: #01785f;
+  }
+  button::-moz-focus-inner {
+    border: none;
+  }
 </style>
 <script src="static/charts.js"></script>
 <div id="controls">
@@ -87,10 +112,23 @@
 (async function() {
   const response = await fetch("static/data.json");
   const data = await response.json();
-  new Charts(
+  const charts = new Charts(
     document.getElementById("charts"),
     document.getElementById("controls"),
-    data
+    data,
+    function afterFrame(charts) {
+      location.hash = JSON.stringify(charts.state());
+    }
   );
+  function onHashChange() {
+    if (!location.hash.length)
+      return;
+    try {
+      const state = JSON.parse(unescape(location.hash.substring(1)));
+      charts.setState(state);
+    } catch (ex) {}
+  }
+  window.addEventListener("hashchange", onHashChange, false);
+  onHashChange();
 })();
 </script>

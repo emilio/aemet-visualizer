@@ -29,6 +29,17 @@ const kLineColors = [
   "fuchsia",
 ];
 
+const kModes = [
+  {
+    id: "full",
+    pretty: "Show all years",
+  },
+  {
+    id: "yearly",
+    pretty: "Show overlaid years",
+  },
+];
+
 const kKnownMetrics = {
   average_temperature: {
     pretty: "Average temperature",
@@ -200,7 +211,7 @@ const kKnownUnits = (function() {
 })();
 
 window.Charts = class Charts {
-  constructor(chartContainer, controls, data) {
+  constructor(chartContainer, controls, data, afterFrameCallback) {
     this.chartContainer = chartContainer;
     this.controls = controls;
     this.data = data;
@@ -211,13 +222,35 @@ window.Charts = class Charts {
       bottom: 40,
       right: 0,
       top: 20,
-    }
+    };
+    this.afterFrameCallback = afterFrameCallback;
     this.dotSize = 5;
     this.stations = {};
     this.charts = {};
+    this.scheduledFrameUpdates = new Set();
+    this.animationFrame = 0;
     this.setupStations();
     this.buildControlsAndCharts();
-    this.rebuildAllCharts();
+    this.scheduleRebuildAllCharts();
+  }
+
+  scheduleRebuildAllCharts() {
+    for (const unit in kKnownUnits)
+      this.scheduleRebuildChartForUnit(unit);
+  }
+
+  scheduleRebuildChartForUnit(unit) {
+    this.scheduledFrameUpdates.add(unit);
+    if (this.animationFrame)
+      return;
+    this.animationFrame = requestAnimationFrame(() => {
+      for (const unit of this.scheduledFrameUpdates)
+        this.rebuildChartForUnit(unit);
+      if (this.afterFrameCallback)
+        this.afterFrameCallback(this);
+      this.scheduledFrameUpdates = new Set();
+      this.animationFrame = 0;
+    });
   }
 
   setupStations() {
@@ -226,33 +259,38 @@ window.Charts = class Charts {
         this.stations[station.id] = station;
   }
 
-  rebuildAllCharts() {
-    for (const unit in kKnownUnits)
-      this.rebuildChartForUnit(unit);
-  }
-
-  checkboxChanged(e) {
-    if (e.target.checked)
-      e.target.parentNode.classList.add("checked")
+  checkboxChanged(input) {
+    if (input.checked)
+      input.parentNode.classList.add("checked")
     else
-      e.target.parentNode.classList.remove("checked")
+      input.parentNode.classList.remove("checked")
   }
 
-  selectedYearChanged(e) {
-    this.checkboxChanged(e);
-    this.rebuildAllCharts();
+  selectedModeChanged(input) {
+    // Event is only fired on the new (checked) checkbox.
+    for (const label of input.form.querySelectorAll("label"))
+      if (label.firstChild.checked)
+        label.classList.add("checked");
+      else
+        label.classList.remove("checked");
+    this.scheduleRebuildAllCharts();
   }
 
-  selectedMetricChanged(e) {
-    this.checkboxChanged(e);
+  selectedYearChanged(input) {
+    this.checkboxChanged(input);
+    this.scheduleRebuildAllCharts();
+  }
+
+  enabledMetricChanged(input) {
+    this.checkboxChanged(input);
     for (const unit in kKnownUnits)
-      if (kKnownUnits[unit].includes(e.target.value))
-        this.rebuildChartForUnit(unit);
+      if (kKnownUnits[unit].includes(input.value))
+        this.scheduleRebuildChartForUnit(unit);
   }
 
-  selectedStationChanged(e) {
-    this.checkboxChanged(e);
-    this.rebuildAllCharts();
+  selectedStationChanged(input) {
+    this.checkboxChanged(input);
+    this.scheduleRebuildAllCharts();
   }
 
   buildControlsAndCharts() {
@@ -263,29 +301,58 @@ window.Charts = class Charts {
       input.value = data.year;
       input.type = "checkbox";
       input.checked = true;
-      input.addEventListener("change", e => this.selectedYearChanged(e));
+      input.addEventListener("change", e => this.selectedYearChanged(e.target));
       label.appendChild(input);
       label.classList.add("checked");
       label.appendChild(document.createTextNode(data.year));
       yearlyControls.appendChild(label);
     }
 
+    const modeControls = document.createElement("mode-controls");
+    {
+      const form = document.createElement("form"); // To ensure the name doesn't escape.
+      let modeChecked = true;
+      for (const mode of kModes) {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.value = mode.id;
+        input.type = "radio";
+        input.name = "mode";
+        if (modeChecked) {
+          label.classList.add("checked");
+          input.checked = true;
+          modeChecked = false;
+        }
+        input.addEventListener("change", e => this.selectedModeChanged(e.target));
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(mode.pretty));
+        form.appendChild(label);
+      }
+      modeControls.appendChild(form);
+    }
+
     const stationControls = document.createElement("station-controls");
-    for (const [_, station] of Object.entries(this.stations)) {
-      const label = document.createElement("label");
-      const input = document.createElement("input");
-      input.value = station.id;
-      input.type = "checkbox";
-      input.checked = true;
-      input.addEventListener("change", e => this.selectedStationChanged(e));
-      label.classList.add("checked");
-      label.appendChild(input);
-      label.appendChild(document.createTextNode(`${station.id} - ${station.name} (${station.city}, ${station.province})`));
-      label.title = `${station.altitude} - ${station.latitude} - ${station.longitude}`;
-      stationControls.appendChild(label);
+    {
+      const button = this.buildToggleAllButton(stationControls, input => this.selectedStationChanged(input));
+      stationControls.appendChild(button);
+
+      for (const [_, station] of Object.entries(this.stations)) {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.value = station.id;
+        input.type = "checkbox";
+        input.checked = true;
+        input.addEventListener("change", e => this.selectedStationChanged(e.target));
+        label.classList.add("checked");
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(`${station.id} - ${station.name} (${station.city}, ${station.province})`));
+        label.title = `${station.altitude} - ${station.latitude} - ${station.longitude}`;
+        stationControls.appendChild(label);
+      }
     }
 
     this.controls.appendChild(yearlyControls);
+    this.controls.appendChild(modeControls);
     this.controls.appendChild(stationControls);
 
     for (const unit in kKnownUnits)
@@ -329,11 +396,33 @@ window.Charts = class Charts {
     });
   }
 
+  buildToggleAllButton(container, onChange) {
+    const button = document.createElement("button");
+    button.appendChild(document.createTextNode("Select / unselect all"));
+    button.addEventListener("click", () => {
+      let checked = false;
+      let checkedSet = false;
+      for (const input of container.querySelectorAll("input")) {
+        if (!checkedSet)
+          checked = !input.checked;
+        checkedSet = true;
+        const changed = checked != input.checked;
+        input.checked = checked;
+        if (changed)
+          onChange(input);
+      }
+    }, false);
+    return button;
+  }
+
   buildControlsAndChartsForUnit(unit) {
     const container = document.createElement("chart-container");
     this.charts[unit] = container;
 
     const controls = document.createElement("metric-controls")
+    const button = this.buildToggleAllButton(controls, input => this.enabledMetricChanged(input));
+    controls.appendChild(button);
+
     for (const m of kKnownUnits[unit]) {
       const metric = kKnownMetrics[m];
       const label = document.createElement("label");
@@ -343,7 +432,7 @@ window.Charts = class Charts {
       input.checked = true;
       label.appendChild(input);
       label.classList.add("checked");
-      input.addEventListener("change", e => this.selectedMetricChanged(e));
+      input.addEventListener("change", e => this.enabledMetricChanged(e.target));
       label.appendChild(document.createTextNode(`${metric.pretty} (${metric.unit})`));
       controls.appendChild(label);
     }
@@ -353,24 +442,86 @@ window.Charts = class Charts {
     container.appendChild(controls);
     container.appendChild(chart);
 
-    this.rebuildChartForUnit(unit);
     this.chartContainer.appendChild(container);
+    this.scheduleRebuildChartForUnit(unit);
+  }
+
+  controlInputs(kind) {
+    return this.controls.querySelector(kind).querySelectorAll("input");
+  }
+
+  setStateFromArray(inputs, values, onChange) {
+    for (const input of inputs) {
+      let checked = false;
+      // NOTE(emilio): Not using includes() to get != rather than !== semantics.
+      for (const value of values) {
+        if (value != input.value)
+          continue;
+        checked = true;
+        break;
+      }
+      if (input.checked == checked)
+        continue;
+      input.checked = checked;
+      onChange(input);
+    }
   }
 
   enabledYears() {
     const enabled = new Set();
-    for (const input of this.controls.querySelector("yearly-controls").querySelectorAll("input"))
+    for (const input of this.controlInputs("yearly-controls"))
       if (input.checked)
         enabled.add(parseInt(input.value, 10));
     return enabled;
   }
 
+  setEnabledYears(years) {
+    this.setStateFromArray(this.controlInputs("yearly-controls"), years, input => this.selectedYearChanged(input))
+  }
+
   enabledStations() {
     const enabled = new Set();
-    for (const input of this.controls.querySelector("station-controls").querySelectorAll("input"))
+    for (const input of this.controlInputs("station-controls"))
       if (input.checked)
         enabled.add(input.value);
     return enabled;
+  }
+
+  setEnabledStations(stations) {
+    this.setStateFromArray(this.controlInputs("station-controls"), stations, input => this.selectedStationChanged(input))
+  }
+
+  enabledMetrics(unit) {
+    const enabledMetrics = new Set();
+    for (const input of this.charts[unit].querySelector("metric-controls").querySelectorAll("input"))
+      if (input.checked)
+        enabledMetrics.add(input.value);
+    return enabledMetrics;
+  }
+
+  setEnabledMetrics(unit, metrics) {
+    if (!this.charts[unit])
+      return;
+    this.setStateFromArray(this.charts[unit].querySelector("metric-controls").querySelectorAll("input"), metrics, input => this.enabledMetricChanged(input));
+  }
+
+  selectedMode() {
+    for (const input of this.controlInputs("mode-controls"))
+      if (input.checked)
+        return input.value;
+    return kModes[0].id;
+  }
+
+  setSelectedMode(mode) {
+    for (const input of this.controlInputs("mode-controls")) {
+      if (input.value != mode)
+        continue;
+      if (!input.checked) {
+        input.checked = true;
+        this.selectedModeChanged(input);
+      }
+      return;
+    }
   }
 
   rebuildChartForUnit(unit) {
@@ -388,11 +539,7 @@ window.Charts = class Charts {
     if (enabledStations.size == 0)
       return;
 
-    const enabledMetrics = new Set();
-    for (const input of container.querySelector("metric-controls").querySelectorAll("input"))
-      if (input.checked)
-        enabledMetrics.add(input.value);
-
+    const enabledMetrics = this.enabledMetrics(unit);
     if (enabledMetrics.size == 0)
       return;
 
@@ -405,6 +552,7 @@ window.Charts = class Charts {
       max = 100;
     }
 
+    const overlayYears = this.selectedMode() === "yearly";
     const lines = {};
     {
       let currentYear = 0;
@@ -414,8 +562,6 @@ window.Charts = class Charts {
         for (const m in data) {
           if (!enabledMetrics.has(m))
             continue;
-          if (!lines[m])
-            lines[m] = {};
           for (const yearData of data[m]) {
             const station = yearData.station_id;
             if (!enabledStations.has(station))
@@ -429,10 +575,14 @@ window.Charts = class Charts {
                 value *= kKnownMetrics[m].multiplier;
               min = Math.min(min, value);
               max = Math.max(max, value);
-              if (!lines[m][station])
-                lines[m][station] = [];
-              lines[m][station].push({
-                year: currentYear,
+              let key = `${kKnownMetrics[m].pretty} - ${this.stations[station].name}`;
+              if (overlayYears)
+                key += ` - ${data.year}`;
+
+              if (!lines[key])
+                lines[key] = [];
+              lines[key].push({
+                year: overlayYears ? 0 : currentYear,
                 month: currentMonth,
                 value: value,
               });
@@ -480,7 +630,8 @@ window.Charts = class Charts {
     const availWidth = this.width - this.axisPadding.left - this.axisPadding.right;
     const availHeight = this.height - this.axisPadding.top - this.axisPadding.bottom;
     const yRange = max - min;
-    const sizePerYear = availWidth / enabledYears.size;
+
+    const sizePerYear = overlayYears ? availWidth : availWidth / enabledYears.size;
     const sizePerMonth = sizePerYear / kMonths.length;
 
     {
@@ -499,12 +650,19 @@ window.Charts = class Charts {
         consumedSize += sizePerMonth;
       };
 
+      let appendMonthLabels = year => {
+        for (let i = 0; i < kMonths.length; ++i)
+          appendLabel(year && i == 0 ? year : kMonths[i].substring(0, 3));
+      };
+
       // XXX: Is Set iteration order well-defined enough?
       // XXX: What if years are not contiguous? What does that even mean?
-      let yearsSeen = 0;
-      for (const year of enabledYears)
-        for (let i = 0; i < kMonths.length; ++i)
-          appendLabel(i == 0 ? year : kMonths[i].substring(0, 3));
+      if (overlayYears)
+        appendMonthLabels(null);
+      else {
+        for (const year of enabledYears)
+          appendMonthLabels(year);
+      }
       svg.appendChild(labels);
     }
 
@@ -533,33 +691,57 @@ window.Charts = class Charts {
       pointContainer.classList.add("points");
 
       let lineIndex = 0;
-      for (const metric in lines) {
-        for (const station in lines[metric]) {
-          const points = lines[metric][station];
-          const line = document.createElementNS(kSvgNs, "polyline");
-          const pointsAttr = [];
-          const color = kLineColors[lineIndex++ % kLineColors.length];
-          for (const point of points) {
-            const circle = document.createElementNS(kSvgNs, "circle");
-            const x = this.axisPadding.left + point.year * sizePerYear + point.month * sizePerMonth;
-            const y = this.axisPadding.top + (1 - ((point.value - min) / yRange)) * availHeight;
-            circle.style.color = color;
-            circle.setAttribute("cx", x);
-            circle.setAttribute("cy", y);
-            circle.setAttribute("r", this.dotSize / 2);
-            circle.setAttribute("title", `${kKnownMetrics[metric].pretty} - ${this.stations[station].name} - ${kMonths[point.month]} - ${point.value}`);
-            pointsAttr.push(`${x},${y}`);
-            pointContainer.appendChild(circle);
-          }
-          line.setAttribute("points", pointsAttr.join(" "));
-          line.setAttribute("title", `${kKnownMetrics[metric].pretty} - ${this.stations[station].name}`);
-          line.style.color = color;
-          pointContainer.insertBefore(line, pointContainer.firstChild);
+      for (const lineKey in lines) {
+        const points = lines[lineKey];
+        const line = document.createElementNS(kSvgNs, "polyline");
+        const pointsAttr = [];
+        const color = kLineColors[lineIndex++ % kLineColors.length];
+        for (const point of points) {
+          const circle = document.createElementNS(kSvgNs, "circle");
+          const x = this.axisPadding.left + point.year * sizePerYear + point.month * sizePerMonth;
+          const y = this.axisPadding.top + (1 - ((point.value - min) / yRange)) * availHeight;
+          circle.style.color = color;
+          circle.setAttribute("cx", x);
+          circle.setAttribute("cy", y);
+          circle.setAttribute("r", this.dotSize / 2);
+          circle.setAttribute("title", `${lineKey} - ${kMonths[point.month]} - ${point.value}`);
+          pointsAttr.push(`${x},${y}`);
+          pointContainer.appendChild(circle);
         }
+        line.setAttribute("points", pointsAttr.join(" "));
+        line.setAttribute("title", lineKey);
+        line.style.color = color;
+        pointContainer.insertBefore(line, pointContainer.firstChild);
       }
       svg.appendChild(pointContainer);
     }
     chart.appendChild(svg);
+  }
+
+  state() {
+    return {
+      enabledYears: Array.from(this.enabledYears()),
+      enabledStations: Array.from(this.enabledStations()),
+      mode: this.selectedMode(),
+      units: (() => {
+        const units = {};
+        for (const unit in kKnownUnits)
+          units[unit] = Array.from(this.enabledMetrics(unit));
+        return units;
+      })(),
+    };
+  }
+
+  setState(state) {
+    if (state.mode)
+      this.setSelectedMode(state.mode);
+    if (Array.isArray(state.enabledYears))
+      this.setEnabledYears(state.enabledYears);
+    if (Array.isArray(state.enabledStations))
+      this.setEnabledStations(state.enabledStations);
+    if (state.units)
+      for (const unit in state.units)
+        this.setEnabledMetrics(unit, state.units[unit]);
   }
 };
 
