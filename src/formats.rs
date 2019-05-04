@@ -49,6 +49,68 @@ pub struct CardinalPoint {
     seconds: u32,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WithDate<Data> {
+    value: Data,
+    date: String,
+}
+
+macro_rules! forward_with_date_de {
+    ($ty: ident) => {
+        impl<'de> de::Deserialize<'de> for WithDate<$ty> {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: de::Deserializer<'de>,
+            {
+                let float = WithDate::<f32>::deserialize(deserializer)?;
+                Ok(WithDate {
+                    value: $ty(float.value),
+                    date: float.date,
+                })
+            }
+        }
+    }
+}
+
+forward_with_date_de!(Celsius);
+forward_with_date_de!(Mm);
+forward_with_date_de!(TenthsOfHectoPascal);
+
+impl<'de> de::Deserialize<'de> for WithDate<f32> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        let s: String = de::Deserialize::deserialize(deserializer)?;
+        let mut split = s.split('(');
+
+        let value = match split.next() {
+            Some(s) => s.parse().map_err(|_| de::Error::custom("Invalid value in WithDate"))?,
+            None => return Err(de::Error::custom("Empty value")),
+        };
+
+        let rest = match split.next() {
+            Some(s) => s,
+            None => return Err(de::Error::custom("No date?")),
+        };
+
+        let mut split = rest.split(')');
+        let date = match split.next() {
+            Some(d) => d,
+            None => return Err(de::Error::custom("Incomplete input")),
+        };
+
+        match split.next() {
+            None => Err(de::Error::custom("Unclosed parenthesis?")),
+            Some(s) if !s.is_empty() => Err(de::Error::custom("Extraneous content?")),
+            _ => Ok(WithDate {
+                value,
+                date: date.to_string(),
+            }),
+        }
+    }
+}
+
 impl CardinalPoint {
     fn to_string(&self) -> String {
         format!("{:02}{:02}{:02}", self.degrees, self.minutes, self.seconds,)
@@ -253,8 +315,8 @@ macro_rules! enumerate_record_kinds {
             [average_max_temperature, Celsius, "TM_MAX"],
             [average_min_temperature, Celsius, "TM_MIN"],
 
-            // [absolute_max_temperature, WithDate<Celsius>, "TA_MAX"],
-            // [absolute_min_temperature, WithDate<Celsius>, "TA_MIN"],
+            [absolute_max_temperature, WithDate<Celsius>, "TA_MAX"],
+            [absolute_min_temperature, WithDate<Celsius>, "TA_MIN"],
 
             [higher_min_temperature, Celsius, "TS_MIN"],
             [lower_max_temperature, Celsius, "TI_MAX"],
@@ -263,7 +325,7 @@ macro_rules! enumerate_record_kinds {
             [number_of_days_lteq_0_celsius, Days, "NT_00"],
 
             [total_rain, Mm, "P_MES"],
-            // [max_rain, WithDate<Mm>, "P_MAX"],
+            [max_rain, WithDate<Mm>, "P_MAX"],
 
             [days_with_appreciable_rain, Days, "NP_001"],
             [days_with_rain_gteq_1_mm, Days, "NP_010"],
@@ -300,8 +362,8 @@ macro_rules! enumerate_record_kinds {
             [average_wind_speed, KilometersPerHour, "W_MED"],
 
             [average_pressure, TenthsOfHectoPascal, "Q_MED"],
-            // [max_pressure, WithDate<TenthsOfHectoPascal>, "Q_MAX"],
-            // [min_pressure, WithDate<TenthsOfHectoPascal>, "Q_MIN"],
+            [max_pressure, WithDate<TenthsOfHectoPascal>, "Q_MAX"],
+            [min_pressure, WithDate<TenthsOfHectoPascal>, "Q_MIN"],
             [average_pressure_sea_level, TenthsOfHectoPascal, "Q_MAR"],
 
             [average_temperature_under_10_cm, Celsius, "TS_10"],

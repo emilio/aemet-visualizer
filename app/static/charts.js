@@ -53,6 +53,16 @@ const kKnownMetrics = {
     pretty: "Average min temperature",
     unit: "Celsius",
   },
+  absolute_max_temperature: {
+    pretty: "Absolute max temperature",
+    unit: "Celsius",
+    with_date: true,
+  },
+  absolute_min_temperature: {
+    pretty: "Absolute min temperature",
+    unit: "Celsius",
+    with_date: true,
+  },
   higher_min_temperature: {
     pretty: "Higher min temperature",
     unit: "Celsius",
@@ -72,6 +82,11 @@ const kKnownMetrics = {
   total_rain: {
     pretty: "Total rain",
     unit: "Mm",
+  },
+  max_rain: {
+    pretty: "Max rain",
+    unit: "Mm",
+    with_date: true,
   },
   days_with_appreciable_rain: {
     pretty: "Days with appreciable rain (>= 0.1mm)",
@@ -169,6 +184,18 @@ const kKnownMetrics = {
     pretty: "Average pressure at sea level",
     unit: "hPa",
     multiplier: 0.1,
+  },
+  max_pressure: {
+    pretty: "Max pressure",
+    unit: "hPa",
+    multiplier: 0.1,
+    with_date: true,
+  },
+  min_pressure: {
+    pretty: "Min pressure",
+    unit: "hPa",
+    multiplier: 0.1,
+    with_date: true,
   },
   average_temperature_under_10_cm: {
     pretty: "Average temperature under 10 cm",
@@ -568,9 +595,11 @@ window.Charts = class Charts {
               continue;
             for (let currentMonth = 0; currentMonth < kMonths.length; ++currentMonth) {
               const month = kMonths[currentMonth];
-              let value = yearData[month];
-              if (!value)
+              let longValue = yearData[month];
+              if (!longValue)
                 continue;
+              // longValue should either be a number or a WithDate<>.
+              let value = longValue.value || longValue;
               if (kKnownMetrics[m].multiplier)
                 value *= kKnownMetrics[m].multiplier;
               min = Math.min(min, value);
@@ -584,7 +613,8 @@ window.Charts = class Charts {
               lines[key].push({
                 year: overlayYears ? 0 : currentYear,
                 month: currentMonth,
-                value: value,
+                value,
+                date: longValue.date,
               });
             }
           }
@@ -704,7 +734,10 @@ window.Charts = class Charts {
           circle.setAttribute("cx", x);
           circle.setAttribute("cy", y);
           circle.setAttribute("r", this.dotSize / 2);
-          circle.setAttribute("title", `${lineKey} - ${kMonths[point.month]} - ${point.value}`);
+          let title = `${lineKey} - ${kMonths[point.month]} - ${point.value}`;
+          if (point.date)
+            title += ` - (date: ${point.date})`;
+          circle.setAttribute("title", title);
           pointsAttr.push(`${x},${y}`);
           pointContainer.appendChild(circle);
         }
