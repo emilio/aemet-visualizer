@@ -8,5 +8,5 @@ mod formats;
 
 fn main() {
     let data = formats::YearlyData::all_from_manifest_dir();
-    print!("{}", serde_json::to_string(&data).unwrap());
+    print!("{}", serde_json::to_string_pretty(&data).unwrap());
 }
