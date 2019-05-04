@@ -160,34 +160,46 @@ pub struct Station {
 
 /// "Formato F1", with the unit of the statistical data.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct F1<Data> {
+pub struct F1<Data>
+where
+    Option<Data>: serde::Serialize + for<'a> serde::Deserialize<'a>,
+{
     #[serde(alias = "Indicativo")]
     pub station_id: String,
-    #[serde(alias = "enero")]
+    #[serde(flatten)]
+    pub yearly: PerYear<Data>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PerYear<Data>
+where
+    Option<Data>: serde::Serialize + for<'a> serde::Deserialize<'a>,
+{
+    #[serde(deserialize_with = "csv::invalid_option", alias = "enero")]
     pub january: Option<Data>,
-    #[serde(alias = "febrero")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "febrero")]
     pub february: Option<Data>,
-    #[serde(alias = "marzo")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "marzo")]
     pub march: Option<Data>,
-    #[serde(alias = "abril")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "abril")]
     pub april: Option<Data>,
-    #[serde(alias = "mayo")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "mayo")]
     pub may: Option<Data>,
-    #[serde(alias = "junio")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "junio")]
     pub june: Option<Data>,
-    #[serde(alias = "julio")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "julio")]
     pub july: Option<Data>,
-    #[serde(alias = "agosto")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "agosto")]
     pub august: Option<Data>,
-    #[serde(alias = "septiembre")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "septiembre")]
     pub september: Option<Data>,
-    #[serde(alias = "octubre")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "octubre")]
     pub october: Option<Data>,
-    #[serde(alias = "noviembre")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "noviembre")]
     pub november: Option<Data>,
-    #[serde(alias = "diciembre")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "diciembre")]
     pub december: Option<Data>,
-    #[serde(alias = "anual")]
+    #[serde(deserialize_with = "csv::invalid_option", alias = "anual")]
     pub yearly: Option<Data>,
 }
 

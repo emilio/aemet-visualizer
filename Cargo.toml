@@ -8,6 +8,11 @@ license-file = "LICENSE"
 
 [dependencies]
 csv = "1"
+serde_json = "1"
 serde = "1"
 serde_derive = "1"
-serde_json = "1"
+
+# FIXME: Pending merge of https://github.com/serde-rs/serde/pull/1519
+[patch.crates-io]
+serde = { git = "https://github.com/emilio/serde", branch = "flat-alias" }
+serde_derive = { git = "https://github.com/emilio/serde", branch = "flat-alias" }
