@@ -22,8 +22,10 @@ pub struct Percentage(pub f32);
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TenthsOfHectoPascal(pub f32);
 
+// FIXME: This should be u32, but the aggregate data contains floats with a
+// bunch of .0's
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Days(pub u32);
+pub struct Days(pub f32);
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Hours(pub f32);
@@ -274,8 +276,6 @@ impl YearlyData {
         where
             Record: for<'de> serde::de::Deserialize<'de>,
         {
-            use csv;
-
             let file = match fs::File::open(&path) {
                 Ok(file) => file,
                 Err(e) => panic!("Could not open {}: {:?}", path.display(), e),
