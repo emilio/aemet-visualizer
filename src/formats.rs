@@ -160,21 +160,64 @@ pub struct Station {
 
 /// "Formato F1", with the unit of the statistical data.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct F1<Data>
-where
-    Option<Data>: serde::Serialize + for<'a> serde::Deserialize<'a>,
-{
+#[serde(bound = "Option<Data>: serde::Serialize + for<'a> serde::Deserialize<'a>")]
+pub struct F1<Data> {
     #[serde(alias = "Indicativo")]
     pub station_id: String,
     #[serde(flatten)]
     pub yearly: PerYear<Data>,
 }
 
+/// "Formato F4", for aggregates.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct PerYear<Data>
-where
-    Option<Data>: serde::Serialize + for<'a> serde::Deserialize<'a>,
-{
+pub enum AggregateParameter {
+    /// The number of samples in this aggregate.
+    #[serde(alias = "N")]
+    SampleCount,
+    Min,
+    Q1,
+    Q2,
+    Q3,
+    Q4,
+    Max,
+    #[serde(alias = "Mn")]
+    Median,
+    #[serde(alias = "Md")]
+    Average,
+    #[serde(alias = "S")]
+    StdDev,
+    Cv,
+}
+
+/// "Formato F4", for aggregates.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(bound = "Option<Data>: serde::Serialize + for<'a> serde::Deserialize<'a>")]
+pub struct F4<Data> {
+    #[serde(alias = "Indicativo")]
+    pub station_id: String,
+    #[serde(alias = "parámetro")]
+    pub parameter: AggregateParameter,
+    #[serde(flatten)]
+    pub yearly: PerYear<Data>,
+}
+
+impl<Data> F4<Data> {
+    /// Turns an aggregate into the yearly data and the aggregate parameter it
+    /// represents.
+    pub fn into_f1(self) -> (F1<Data>, AggregateParameter) {
+        (
+            F1 {
+                station_id: self.station_id,
+                yearly: self.yearly,
+            },
+            self.parameter,
+        )
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(bound = "Option<Data>: serde::Serialize + for<'a> serde::Deserialize<'a>")]
+pub struct PerYear<Data> {
     #[serde(deserialize_with = "csv::invalid_option", alias = "enero")]
     pub january: Option<Data>,
     #[serde(deserialize_with = "csv::invalid_option", alias = "febrero")]
@@ -203,85 +246,119 @@ where
     pub yearly: Option<Data>,
 }
 
-/// The yearly data for all the meteorological stations.
-///
-/// http://www.aemet.es/documentos/es/datos_abiertos/Estadisticas/Estadisticas_meteorofenologicas/evmf_parametros.pdf
-#[derive(Debug, Deserialize, Serialize)]
-pub struct YearlyData {
-    pub year: u32,
+macro_rules! enumerate_record_kinds {
+    ($m:ident) => {
+        $m! {
+            [average_temperature, Celsius, "TM_MES"],
+            [average_max_temperature, Celsius, "TM_MAX"],
+            [average_min_temperature, Celsius, "TM_MIN"],
 
-    pub stations: Vec<Station>,
+            // [absolute_max_temperature, WithDate<Celsius>, "TA_MAX"],
+            // [absolute_min_temperature, WithDate<Celsius>, "TA_MIN"],
 
-    pub average_temperature: Vec<F1<Celsius>>,
-    pub average_max_temperature: Vec<F1<Celsius>>,
-    pub average_min_temperature: Vec<F1<Celsius>>,
+            [higher_min_temperature, Celsius, "TS_MIN"],
+            [lower_max_temperature, Celsius, "TI_MAX"],
 
-    // pub absolute_max_temperature: F2<Celsius>,
-    // pub absolute_min_temperature: F2<Celsius>,
+            [number_of_days_gteq_30_celsius, Days, "NT_30"],
+            [number_of_days_lteq_0_celsius, Days, "NT_00"],
 
-    pub higher_min_temperature: Vec<F1<Celsius>>,
-    pub lower_max_temperature: Vec<F1<Celsius>>,
+            [total_rain, Mm, "P_MES"],
+            // [max_rain, WithDate<Mm>, "P_MAX"],
 
-    pub number_of_days_gteq_30_celsius: Vec<F1<Days>>,
-    pub number_of_days_lteq_0_celsius: Vec<F1<Days>>,
+            [days_with_appreciable_rain, Days, "NP_001"],
+            [days_with_rain_gteq_1_mm, Days, "NP_010"],
+            [days_with_rain_gteq_10_mm, Days, "NP_100"],
+            [days_with_rain_gteq_30_mm, Days, "NP_300"],
 
-    pub total_rain: Vec<F1<Mm>>,
-    // pub max_rain: Vec<F2<Mm>>,
+            [average_relative_humidity, Percentage, "HR"],
+            [average_vapor_tension, TenthsOfHectoPascal, "E"],
 
-    pub days_with_appreciable_rain: Vec<F1<Days>>,
-    pub days_with_rain_gteq_1_mm: Vec<F1<Days>>,
-    pub days_with_rain_gteq_10_mm: Vec<F1<Days>>,
-    pub days_with_rain_gteq_30_mm: Vec<F1<Days>>,
+            [days_of_rain, Days, "N_LLU"],
+            [days_of_snow, Days, "N_NIE"],
+            [days_of_hail, Days, "N_GRA"],
+            [days_of_storm, Days, "N_TOR"],
+            [days_of_fog, Days, "N_FOG"],
+            [clear_days, Days, "N_DES"],
+            [cloudy_days, Days, "N_NUB"],
+            [covered_days, Days, "N_CUB"],
 
-    pub average_relative_humidity: Vec<F1<Percentage>>,
-    pub average_vapor_tension: Vec<F1<TenthsOfHectoPascal>>,
+            [hours_of_sun, Hours, "INSO"],
+            [average_percentage_against_theoric_insolation, Percentage, "P_SOL"],
 
-    pub days_of_rain: Vec<F1<Days>>,
-    pub days_of_snow: Vec<F1<Days>>,
-    pub days_of_hail: Vec<F1<Days>>,
-    pub days_of_storm: Vec<F1<Days>>,
-    pub days_of_fog: Vec<F1<Days>>,
-    pub clear_days: Vec<F1<Days>>,
-    pub cloudy_days: Vec<F1<Days>>,
-    pub covered_days: Vec<F1<Days>>,
+            // TODO, What's this unit even? Tenths of Kj.m^{-2}
+            // [global_radiation, XXX, "GLO"],
 
-    pub hours_of_sun: Vec<F1<Hours>>,
-    pub average_percentage_against_theoric_insolation: Vec<F1<Percentage>>,
+            [evaporation, TenthsOfMm, "EVAP"],
 
-    // TODO: What's this unit even? Tenths of Kj.m^{-2}
-    // pub global_radiation: Vec<F1<XXX>>,
+            [average_distance, Kilometers, "W_REC"],
 
-    pub evaporation: Vec<F1<TenthsOfMm>>,
+            // [biggest_gust_of_wind, F3, "W_RACHA"],
 
-    pub average_distance: Vec<F1<Kilometers>>,
+            [days_with_wind_greater_than_55_km_per_hour, Days, "NW_55"],
+            [days_with_wind_greater_than_91_km_per_hour, Days, "NW_91"],
 
-    // pub biggest_gust_of_wind: Vec<F3>,
+            [average_wind_speed, KilometersPerHour, "W_MED"],
 
-    pub days_with_wind_greater_than_55_km_per_hour: Vec<F1<Days>>,
-    pub days_with_wind_greater_than_91_km_per_hour: Vec<F1<Days>>,
+            [average_pressure, TenthsOfHectoPascal, "Q_MED"],
+            // [max_pressure, WithDate<TenthsOfHectoPascal>, "Q_MAX"],
+            // [min_pressure, WithDate<TenthsOfHectoPascal>, "Q_MIN"],
+            [average_pressure_sea_level, TenthsOfHectoPascal, "Q_MAR"],
 
-    pub average_wind_speed: Vec<F1<KilometersPerHour>>,
+            [average_temperature_under_10_cm, Celsius, "TS_10"],
+            [average_temperature_under_20_cm, Celsius, "TS_20"],
+            [average_temperature_under_50_cm, Celsius, "TS_50"],
 
-    pub average_pressure: Vec<F1<TenthsOfHectoPascal>>,
-    // pub max_pressure: Vec<F2<TenthsOfHectoPascal>>,
-    // pub min_pressure: Vec<F2<TenthsOfHectoPascal>>,
-    pub average_pressure_sea_level: Vec<F1<TenthsOfHectoPascal>>,
-
-    pub average_temperature_under_10_cm: Vec<F1<Celsius>>,
-    pub average_temperature_under_20_cm: Vec<F1<Celsius>>,
-    pub average_temperature_under_50_cm: Vec<F1<Celsius>>,
-
-    pub days_with_visibility_lt_50_m: Vec<F1<Days>>,
-    pub days_with_visibility_gteq_50_m_lt_100_m: Vec<F1<Days>>,
-    pub days_with_visibility_gteq_100_m_lt_1000_m: Vec<F1<Days>>,
+            [days_with_visibility_lt_50_m, Days, "NV_0050"],
+            [days_with_visibility_gteq_50_m_lt_100_m, Days, "NV_0100"],
+            [days_with_visibility_gteq_100_m_lt_1000_m, Days, "NV_1000"],
+        }
+    }
 }
 
+macro_rules! declare_aggregate_data {
+    ($([$name:ident, $ty:ty, $f:expr],)*) => {
+        /// The yearly data for all the meteorological stations.
+        ///
+        /// http://www.aemet.es/documentos/es/datos_abiertos/Estadisticas/Estadisticas_meteorofenologicas/evmf_parametros.pdf
+        #[derive(Debug, Default, Deserialize, Serialize)]
+        pub struct AggregateData {
+            $(
+                pub $name: Vec<F4<$ty>>,
+            )*
+        }
+    }
+}
+
+enumerate_record_kinds!(declare_aggregate_data);
+
+macro_rules! declare_yearly_data {
+    ($([$name:ident, $ty:ty, $f:expr],)*) => {
+        /// The yearly data for all the meteorological stations.
+        ///
+        /// http://www.aemet.es/documentos/es/datos_abiertos/Estadisticas/Estadisticas_meteorofenologicas/evmf_parametros.pdf
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct YearlyData {
+            pub year: u32,
+            pub stations: Vec<Station>,
+            $(
+                pub $name: Vec<F1<$ty>>,
+            )*
+            pub aggregate: AggregateData,
+        }
+    }
+}
+
+enumerate_record_kinds!(declare_yearly_data);
 
 impl YearlyData {
     /// Reads the yearly data from a given csv directory.
     ///
     /// This panics on error, assuming that data is under control.
-    pub fn from_csv(directory: &std::path::Path, year: u32) -> Self {
+    pub fn from_csv(
+        directory: &std::path::Path,
+        year: u32,
+        with_aggregate: bool,
+    ) -> Self {
         use std::{fs, io};
 
         fn read_csv_file<Record>(path: &std::path::Path) -> Vec<Record>
@@ -295,72 +372,51 @@ impl YearlyData {
             let reader = io::BufReader::new(file);
             let mut reader =
                 csv::ReaderBuilder::new().delimiter(b';').from_reader(reader);
-            reader.deserialize().map(|record| record.unwrap()).collect()
+            reader.deserialize().map(|record| {
+                match record {
+                    Ok(record) => record,
+                    Err(e) => panic!("Errored while parsing {}: {:?}", path.display(), e),
+                }
+            }).collect()
         }
 
-        macro_rules! read_monthly {
-            ($name: expr) => {{
-                let path = directory
-                    .join("mensuales")
-                    .join(format!("{}_{}.csv", $name, year));
-                read_csv_file(&path)
-            }}
+        macro_rules! read {
+            ($([$name:ident, $ty:ty, $f:expr],)*) => {
+                Self {
+                    year,
+                    stations: read_csv_file(&directory.join(format!("Maestro_Climatologico_{}.csv", year))),
+                    $(
+                        $name: {
+                            let path = directory
+                                .join("mensuales")
+                                .join(format!("{}_{}.csv", $f, year));
+                            read_csv_file(&path)
+                        },
+                    )*
+
+                    aggregate: if with_aggregate {
+                        AggregateData {
+                            $(
+                                $name: {
+                                    let path = directory
+                                        .join("normales")
+                                        .join(format!("{}_1981_2010.csv", $f));
+                                    read_csv_file(&path)
+                                },
+                            )*
+                        }
+                    } else {
+                        AggregateData::default()
+                    },
+                }
+            }
         };
 
-        Self {
-            year,
-            stations: read_csv_file(&directory.join(format!("Maestro_Climatologico_{}.csv", year))),
-            average_temperature: read_monthly!("TM_MES"),
-            average_max_temperature: read_monthly!("TM_MAX"),
-            average_min_temperature: read_monthly!("TM_MIN"),
-            higher_min_temperature: read_monthly!("TS_MIN"),
-            lower_max_temperature: read_monthly!("TI_MAX"),
-            number_of_days_gteq_30_celsius: read_monthly!("NT_30"),
-            number_of_days_lteq_0_celsius: read_monthly!("NT_00"),
-            total_rain: read_monthly!("P_MES"),
-            days_with_appreciable_rain: read_monthly!("NP_001"),
-            days_with_rain_gteq_1_mm: read_monthly!("NP_010"),
-            days_with_rain_gteq_10_mm: read_monthly!("NP_100"),
-            days_with_rain_gteq_30_mm: read_monthly!("NP_300"),
-
-            average_relative_humidity: read_monthly!("HR"),
-            average_vapor_tension: read_monthly!("E"),
-
-            days_of_rain: read_monthly!("N_LLU"),
-            days_of_snow: read_monthly!("N_NIE"),
-            days_of_hail: read_monthly!("N_GRA"),
-            days_of_storm: read_monthly!("N_TOR"),
-            days_of_fog: read_monthly!("N_FOG"),
-            clear_days: read_monthly!("N_DES"),
-            cloudy_days: read_monthly!("N_NUB"),
-            covered_days: read_monthly!("N_CUB"),
-
-            hours_of_sun: read_monthly!("INSO"),
-            average_percentage_against_theoric_insolation: read_monthly!("P_SOL"),
-
-            evaporation: read_monthly!("EVAP"),
-            average_distance: read_monthly!("W_REC"),
-
-            days_with_wind_greater_than_55_km_per_hour: read_monthly!("NW_55"),
-            days_with_wind_greater_than_91_km_per_hour: read_monthly!("NW_91"),
-
-            average_wind_speed: read_monthly!("W_MED"),
-
-            average_pressure: read_monthly!("Q_MED"),
-            average_pressure_sea_level: read_monthly!("Q_MAR"),
-
-            average_temperature_under_10_cm: read_monthly!("TS_10"),
-            average_temperature_under_20_cm: read_monthly!("TS_20"),
-            average_temperature_under_50_cm: read_monthly!("TS_50"),
-
-            days_with_visibility_lt_50_m: read_monthly!("NV_0050"),
-            days_with_visibility_gteq_50_m_lt_100_m: read_monthly!("NV_0100"),
-            days_with_visibility_gteq_100_m_lt_1000_m: read_monthly!("NV_1000"),
-        }
+        enumerate_record_kinds!(read)
     }
 
     /// Gets all the data from the in-repo data.
-    pub fn all_from_manifest_dir() -> Vec<Self> {
+    pub fn all_from_manifest_dir(with_aggregate: bool) -> Vec<Self> {
         use std::path::Path;
 
         macro_rules! yearly_data {
@@ -372,6 +428,7 @@ impl YearlyData {
                         stringify!($year)
                     )),
                     $year,
+                    with_aggregate,
                 )
             }}
         }
@@ -390,6 +447,6 @@ mod tests {
 
     #[test]
     fn it_works() {
-        YearlyData::all_from_manifest_dir();
+        YearlyData::all_from_manifest_dir(true);
     }
 }
