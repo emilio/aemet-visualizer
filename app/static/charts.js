@@ -599,7 +599,7 @@ window.Charts = class Charts {
               if (!longValue)
                 continue;
               // longValue should either be a number or a WithDate<>.
-              let value = longValue.value || longValue;
+              let value = kKnownMetrics[m].with_date ? longValue.value : longValue;
               if (kKnownMetrics[m].multiplier)
                 value *= kKnownMetrics[m].multiplier;
               min = Math.min(min, value);
