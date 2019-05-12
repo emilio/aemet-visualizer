@@ -238,10 +238,12 @@ const kKnownUnits = (function() {
 })();
 
 window.Charts = class Charts {
-  constructor(chartContainer, controls, data, afterFrameCallback) {
+  constructor(chartContainer, controls, schema, afterFrameCallback) {
     this.chartContainer = chartContainer;
     this.controls = controls;
-    this.data = data;
+    this.schema = schema;
+    this.data = {};
+    this.loadingData = {};
     this.width = 1200;
     this.height = 600;
     this.axisPadding = {
@@ -259,6 +261,38 @@ window.Charts = class Charts {
     this.setupStations();
     this.buildControlsAndCharts();
     this.scheduleRebuildAllCharts();
+  }
+
+  dataFor(year, unit) {
+    const cachedData = this.data[year];
+    if (cachedData)
+      return cachedData;
+    if (!this.loadingData[year]) {
+      const promise = fetch("static/data/" + year + ".json")
+        .then(data => data.json())
+        .then(data => {
+          console.log("Successfully loaded data for " + year);
+          this.loadedData(year, data);
+        })
+        .catch(error => {
+          console.error("Failed to fetch data for ", year, error);
+          this.loadedData(year, []);
+        });
+
+      this.loadingData[year] = {
+        promise,
+        units: new Set(),
+      };
+    }
+    this.loadingData[year].units.add(unit);
+    return null;
+  }
+
+  loadedData(year, data) {
+    this.data[year] = data;
+    for (const unit of this.loadingData[year].units)
+      this.scheduleRebuildChartForUnit(unit);
+    delete this.loadingData[year];
   }
 
   scheduleRebuildAllCharts() {
@@ -281,7 +315,7 @@ window.Charts = class Charts {
   }
 
   setupStations() {
-    for (const data of this.data)
+    for (const data of this.schema)
       for (const station of data.stations)
         this.stations[station.id] = station;
   }
@@ -322,7 +356,7 @@ window.Charts = class Charts {
 
   buildControlsAndCharts() {
     const yearlyControls = document.createElement("yearly-controls");
-    for (const data of this.data) {
+    for (const data of this.schema) {
       const label = document.createElement("label");
       const input = document.createElement("input");
       input.value = data.year;
@@ -510,7 +544,7 @@ window.Charts = class Charts {
   enabledYearsAccountingForMode() {
     const enabled = this.enabledYears();
     if (!this.overlayYears()) {
-      for (const data of this.data) {
+      for (const data of this.schema) {
         if (data.is_aggregate)
           enabled.delete(data.year);
       }
@@ -597,11 +631,17 @@ window.Charts = class Charts {
 
     const overlayYears = this.overlayYears();
     const lines = {};
+    let loading = false;
     {
       let currentYear = 0;
-      for (const data of this.data) {
-        if (!enabledYears.has(data.year))
+      for (const schemaEntry of this.schema) {
+        if (!enabledYears.has(schemaEntry.year))
           continue;
+        const data = this.dataFor(schemaEntry.year, unit);
+        if (!data) {
+          loading = true;
+          continue;
+        }
         for (const m in data) {
           if (!enabledMetrics.has(m))
             continue;
@@ -638,6 +678,11 @@ window.Charts = class Charts {
         currentYear++;
       }
     }
+
+    if (loading)
+      chart.classList.add("loading");
+    else
+      chart.classList.remove("loading");
 
     const svg = document.createElementNS(kSvgNs, "svg");
     svg.setAttribute("width", this.width);

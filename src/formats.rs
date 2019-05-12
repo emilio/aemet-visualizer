@@ -430,12 +430,13 @@ macro_rules! declare_aggregate_data {
             fn normalize_taking(
                 &mut self,
                 param: AggregateParameter,
+                year: String,
                 label: String,
                 stations: Vec<Station>,
             ) -> YearlyData {
                 YearlyData {
                     year: label,
-                    is_aggregate: true,
+                    is_aggregate: Some(year),
                     stations,
 
                     $(
@@ -470,8 +471,9 @@ macro_rules! declare_yearly_data {
         pub struct YearlyData {
             /// A label that describe the year or the year range.
             pub year: String,
-            /// Whether the data is a normalized aggregate.
-            pub is_aggregate: bool,
+            /// Whether the data is a normalized aggregate, and if so from which
+            /// dataset.
+            pub is_aggregate: Option<String>,
             pub stations: Vec<Station>,
             $(
                 pub $name: Vec<F1<$ty>>,
@@ -529,7 +531,7 @@ impl YearlyData {
             ($([$name:ident, $ty:ty, $f:expr],)*) => {
                 Self {
                     year: year.to_string(),
-                    is_aggregate: false,
+                    is_aggregate: None,
                     stations: read_csv_file(&directory.join(format!("Maestro_Climatologico_{}.csv", year))),
                     $(
                         $name: {
@@ -596,6 +598,7 @@ impl YearlyData {
                 for param in &NORMALIZED_PARAMETERS {
                     extra.push(aggregate.normalize_taking(
                         *param,
+                        d.year.clone(),
                         format!(
                             "{} - {} {} ({} dataset)",
                             aggregate.from_year,
