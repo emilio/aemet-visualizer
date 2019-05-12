@@ -507,6 +507,17 @@ window.Charts = class Charts {
     return this.collectEnabledControls("yearly-controls");
   }
 
+  enabledYearsAccountingForMode() {
+    const enabled = this.enabledYears();
+    if (!this.overlayYears()) {
+      for (const data of this.data) {
+        if (data.is_aggregate)
+          enabled.delete(data.year);
+      }
+    }
+    return enabled;
+  }
+
   setEnabledYears(years) {
     this.setStateFromArray(this.controlInputs("yearly-controls"), years, input => this.selectedYearChanged(input))
   }
@@ -540,6 +551,10 @@ window.Charts = class Charts {
     return kModes[0].id;
   }
 
+  overlayYears() {
+    return this.selectedMode() === "yearly";
+  }
+
   setSelectedMode(mode) {
     for (const input of this.controlInputs("mode-controls")) {
       if (input.value != mode)
@@ -559,7 +574,7 @@ window.Charts = class Charts {
     while (chart.lastChild)
       chart.lastChild.remove();
 
-    const enabledYears = this.enabledYears();
+    const enabledYears = this.enabledYearsAccountingForMode();
     if (enabledYears.size == 0)
       return;
 
@@ -580,14 +595,12 @@ window.Charts = class Charts {
       max = 100;
     }
 
-    const overlayYears = this.selectedMode() === "yearly";
+    const overlayYears = this.overlayYears();
     const lines = {};
     {
       let currentYear = 0;
       for (const data of this.data) {
         if (!enabledYears.has(data.year))
-          continue;
-        if (data.is_aggregate && !overlayYears)
           continue;
         for (const m in data) {
           if (!enabledMetrics.has(m))
