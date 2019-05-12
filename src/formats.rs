@@ -231,7 +231,7 @@ pub struct F1<Data> {
 }
 
 /// "Formato F4", for aggregates.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum AggregateParameter {
     /// The number of samples in this aggregate.
     #[serde(alias = "N")]
@@ -249,6 +249,38 @@ pub enum AggregateParameter {
     #[serde(alias = "S")]
     StdDev,
     Cv,
+}
+
+/// The parameters that can end up being normalized. Sample count, deviation and
+/// coefficient of variation cannot really be normalized, since they're not
+/// really in the units we want.
+const NORMALIZED_PARAMETERS: [AggregateParameter; 8] = [
+    AggregateParameter::Average,
+    AggregateParameter::Median,
+    AggregateParameter::Min,
+    AggregateParameter::Q1,
+    AggregateParameter::Q2,
+    AggregateParameter::Q3,
+    AggregateParameter::Q4,
+    AggregateParameter::Max,
+];
+
+impl AggregateParameter {
+    fn as_human_str(&self) -> &'static str {
+        match *self {
+            AggregateParameter::SampleCount => "sample count",
+            AggregateParameter::Min => "minimum",
+            AggregateParameter::Max => "maximum",
+            AggregateParameter::Q1 => "quintile 1",
+            AggregateParameter::Q2 => "quintile 2",
+            AggregateParameter::Q3 => "quintile 3",
+            AggregateParameter::Q4 => "quintile 4",
+            AggregateParameter::Average => "average",
+            AggregateParameter::Median => "median",
+            AggregateParameter::StdDev => "standard deviation",
+            AggregateParameter::Cv => "coefficient of variation",
+        }
+    }
 }
 
 /// "Formato F4", for aggregates.
@@ -393,7 +425,9 @@ macro_rules! declare_aggregate_data {
         }
 
         impl AggregateData {
-            pub fn normalize_taking(
+            /// Given an aggregate parameter, returns a new `YearlyData` with
+            /// the data that represents that parameter.
+            fn normalize_taking(
                 &mut self,
                 param: AggregateParameter,
                 label: String,
@@ -555,26 +589,25 @@ impl YearlyData {
             yearly_data!(2018),
         ];
 
-        match aggregate_data {
-            AggregateDataProcessing::Full |
-            AggregateDataProcessing::No => {},
-            AggregateDataProcessing::Normalize => {
-                let mut extra = Vec::with_capacity(data.len() * 2);
-                for d in &mut data {
-                    let mut aggregate = std::mem::replace(&mut d.aggregate, Default::default());
+        if let AggregateDataProcessing::Normalize = aggregate_data {
+            let mut extra = Vec::with_capacity(data.len() * NORMALIZED_PARAMETERS.len());
+            for d in &mut data {
+                let mut aggregate = std::mem::replace(&mut d.aggregate, Default::default());
+                for param in &NORMALIZED_PARAMETERS {
                     extra.push(aggregate.normalize_taking(
-                        AggregateParameter::Average,
-                        format!("{} - {} average ({} dataset)", aggregate.from_year, aggregate.to_year, d.year),
-                        d.stations.clone(),
-                    ));
-                    extra.push(aggregate.normalize_taking(
-                        AggregateParameter::Median,
-                        format!("{} - {} median ({} dataset)", aggregate.from_year, aggregate.to_year, d.year),
+                        *param,
+                        format!(
+                            "{} - {} {} ({} dataset)",
+                            aggregate.from_year,
+                            aggregate.to_year,
+                            param.as_human_str(),
+                            d.year,
+                        ),
                         d.stations.clone(),
                     ));
                 }
-                data.extend(extra.into_iter());
             }
+            data.extend(extra.into_iter());
         }
 
         data
