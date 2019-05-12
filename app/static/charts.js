@@ -328,6 +328,7 @@ window.Charts = class Charts {
   }
 
   selectedModeChanged(input) {
+    document.documentElement.setAttribute("data-selected-mode", input.value);
     // Event is only fired on the new (checked) checkbox.
     for (const label of input.form.querySelectorAll("label"))
       if (label.firstChild.checked)
@@ -356,7 +357,9 @@ window.Charts = class Charts {
 
   buildControlsAndCharts() {
     const yearlyControls = document.createElement("yearly-controls");
-    for (const data of this.schema) {
+    const perAggregateData = {};
+
+    const addYearlyControl = function(parentNode, data) {
       const label = document.createElement("label");
       const input = document.createElement("input");
       input.value = data.year;
@@ -367,7 +370,25 @@ window.Charts = class Charts {
       if (input.checked)
         label.classList.add("checked");
       label.appendChild(document.createTextNode(data.year));
-      yearlyControls.appendChild(label);
+      parentNode.appendChild(label);
+    };
+
+    for (const data of this.schema) {
+      if (!data.is_aggregate) {
+        addYearlyControl(yearlyControls, data);
+        continue;
+      }
+      if (!perAggregateData[data.is_aggregate])
+        perAggregateData[data.is_aggregate] = [];
+      perAggregateData[data.is_aggregate].push(data);
+    }
+
+    for (const aggregate in perAggregateData) {
+      const aggregateControls = document.createElement("yearly-aggregate-controls");
+      aggregateControls.setAttribute("data-aggregate", aggregate);
+      for (const data of perAggregateData[aggregate])
+        addYearlyControl(aggregateControls, data);
+      yearlyControls.appendChild(aggregateControls);
     }
 
     const modeControls = document.createElement("mode-controls");
@@ -381,6 +402,7 @@ window.Charts = class Charts {
         input.type = "radio";
         input.name = "mode";
         if (modeChecked) {
+          document.documentElement.setAttribute("data-selected-mode", input.value);
           label.classList.add("checked");
           input.checked = true;
           modeChecked = false;

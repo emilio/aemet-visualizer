@@ -13,13 +13,18 @@
     font-family: sans-serif;
     font-size: .8em;
   }
+  :root[data-selected-mode="full"] yearly-aggregate-controls {
+    opacity: .5;
+  }
   mode-controls::before,
   yearly-controls::before,
+  yearly-aggregate-controls::before,
   station-controls::before {
     font-size: 1.5em;
     content: "Yearly controls";
-    padding: 1rem;
-    margin-bottom: 1rem;
+    padding: .75em;
+    padding-left: 0;
+    margin-bottom: .75em;
     border-bottom: 1px solid grey;
     display: block;
   }
@@ -28,6 +33,10 @@
   }
   station-controls::before {
     content: "Station controls";
+  }
+  yearly-aggregate-controls::before {
+    content: "Aggregates (" attr(data-aggregate) " dataset)";
+    font-size: 1em;
   }
   mode-controls, yearly-controls, station-controls, metric-controls {
     display: block;
