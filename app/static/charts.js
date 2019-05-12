@@ -599,7 +599,7 @@ window.Charts = class Charts {
             for (let currentMonth = 0; currentMonth < kMonths.length; ++currentMonth) {
               const month = kMonths[currentMonth];
               let longValue = yearData[month];
-              if (!longValue)
+              if (longValue === null)
                 continue;
               // longValue should either be a number or a WithDate<>.
               let value = kKnownMetrics[m].with_date ? longValue.value : longValue;
