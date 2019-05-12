@@ -327,7 +327,7 @@ window.Charts = class Charts {
       const input = document.createElement("input");
       input.value = data.year;
       input.type = "checkbox";
-      input.checked = true;
+      input.checked = !data.is_aggregate;
       input.addEventListener("change", e => this.selectedYearChanged(e.target));
       label.appendChild(input);
       label.classList.add("checked");
@@ -494,12 +494,16 @@ window.Charts = class Charts {
     }
   }
 
-  enabledYears() {
+  collectEnabledControls(controlsName) {
     const enabled = new Set();
-    for (const input of this.controlInputs("yearly-controls"))
+    for (const input of this.controlInputs(controlsName))
       if (input.checked)
-        enabled.add(parseInt(input.value, 10));
+        enabled.add(input.value);
     return enabled;
+  }
+
+  enabledYears() {
+    return this.collectEnabledControls("yearly-controls");
   }
 
   setEnabledYears(years) {
@@ -507,11 +511,7 @@ window.Charts = class Charts {
   }
 
   enabledStations() {
-    const enabled = new Set();
-    for (const input of this.controlInputs("station-controls"))
-      if (input.checked)
-        enabled.add(input.value);
-    return enabled;
+    return this.collectEnabledControls("station-controls");
   }
 
   setEnabledStations(stations) {
@@ -585,6 +585,8 @@ window.Charts = class Charts {
       let currentYear = 0;
       for (const data of this.data) {
         if (!enabledYears.has(data.year))
+          continue;
+        if (data.is_aggregate && !overlayYears)
           continue;
         for (const m in data) {
           if (!enabledMetrics.has(m))

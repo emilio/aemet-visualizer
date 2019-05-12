@@ -4,52 +4,52 @@
 
 use serde::{de, ser};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Meters(pub f32);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Celsius(pub f32);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Mm(pub f32);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TenthsOfMm(pub f32);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Percentage(pub f32);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TenthsOfHectoPascal(pub f32);
 
 // FIXME: This should be u32, but the aggregate data contains floats with a
 // bunch of .0's
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Days(pub f32);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Hours(pub f32);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Kilometers(pub f32);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct KilometersPerHour(pub f32);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LongitudeDirection {
     East,
     West,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CardinalPoint {
     degrees: u32,
     minutes: u32,
     seconds: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct WithDate<Data> {
     value: Data,
     date: String,
@@ -138,7 +138,7 @@ impl CardinalPoint {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Longitude {
     point: CardinalPoint,
     direction: LongitudeDirection,
@@ -176,7 +176,7 @@ impl<'de> de::Deserialize<'de> for Longitude {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Latitude(pub CardinalPoint);
 
 impl ser::Serialize for Latitude {
@@ -200,7 +200,7 @@ impl<'de> de::Deserialize<'de> for Latitude {
 }
 
 /// "Maestro climatológico"
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Station {
     #[serde(alias = "INDICATIVO")]
     pub id: String,
@@ -231,7 +231,7 @@ pub struct F1<Data> {
 }
 
 /// "Formato F4", for aggregates.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum AggregateParameter {
     /// The number of samples in this aggregate.
     #[serde(alias = "N")]
@@ -384,9 +384,43 @@ macro_rules! declare_aggregate_data {
         /// http://www.aemet.es/documentos/es/datos_abiertos/Estadisticas/Estadisticas_meteorofenologicas/evmf_parametros.pdf
         #[derive(Debug, Default, Deserialize, Serialize)]
         pub struct AggregateData {
+            pub from_year: u32,
+            pub to_year: u32,
+
             $(
                 pub $name: Vec<F4<$ty>>,
             )*
+        }
+
+        impl AggregateData {
+            pub fn normalize_taking(
+                &mut self,
+                param: AggregateParameter,
+                label: String,
+                stations: Vec<Station>,
+            ) -> YearlyData {
+                YearlyData {
+                    year: label,
+                    is_aggregate: true,
+                    stations,
+
+                    $(
+                        $name: {
+                            // FIXME: Is there a more rusty way to do this?
+                            let mut normalized = vec![];
+                            for i in (0..self.$name.len()).rev() {
+                                if self.$name[i].parameter != param {
+                                    continue;
+                                }
+                                normalized.push(self.$name.remove(i).into_f1().0);
+                            }
+                            normalized
+                        },
+                    )*
+
+                    aggregate: AggregateData::default(),
+                }
+            }
         }
     }
 }
@@ -400,7 +434,10 @@ macro_rules! declare_yearly_data {
         /// http://www.aemet.es/documentos/es/datos_abiertos/Estadisticas/Estadisticas_meteorofenologicas/evmf_parametros.pdf
         #[derive(Debug, Deserialize, Serialize)]
         pub struct YearlyData {
-            pub year: u32,
+            /// A label that describe the year or the year range.
+            pub year: String,
+            /// Whether the data is a normalized aggregate.
+            pub is_aggregate: bool,
             pub stations: Vec<Station>,
             $(
                 pub $name: Vec<F1<$ty>>,
@@ -411,6 +448,18 @@ macro_rules! declare_yearly_data {
 }
 
 enumerate_record_kinds!(declare_yearly_data);
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum AggregateDataProcessing {
+    /// Processes no aggregate data.
+    No,
+    /// Returns the full aggregate data.
+    #[allow(dead_code)]
+    Full,
+    /// Normalizes the aggregate data so that only average / median parameters
+    /// show up.
+    Normalize,
+}
 
 impl YearlyData {
     /// Reads the yearly data from a given csv directory.
@@ -445,7 +494,8 @@ impl YearlyData {
         macro_rules! read {
             ($([$name:ident, $ty:ty, $f:expr],)*) => {
                 Self {
-                    year,
+                    year: year.to_string(),
+                    is_aggregate: false,
                     stations: read_csv_file(&directory.join(format!("Maestro_Climatologico_{}.csv", year))),
                     $(
                         $name: {
@@ -458,6 +508,8 @@ impl YearlyData {
 
                     aggregate: if with_aggregate {
                         AggregateData {
+                            from_year: 1981,
+                            to_year: 2010,
                             $(
                                 $name: {
                                     let path = directory
@@ -478,7 +530,9 @@ impl YearlyData {
     }
 
     /// Gets all the data from the in-repo data.
-    pub fn all_from_manifest_dir(with_aggregate: bool) -> Vec<Self> {
+    pub fn all_from_manifest_dir(
+        aggregate_data: AggregateDataProcessing,
+    ) -> Vec<Self> {
         use std::path::Path;
 
         macro_rules! yearly_data {
@@ -490,16 +544,40 @@ impl YearlyData {
                         stringify!($year)
                     )),
                     $year,
-                    with_aggregate,
+                    aggregate_data != AggregateDataProcessing::No,
                 )
             }}
         }
 
-        vec![
+        let mut data = vec![
             yearly_data!(2016),
             yearly_data!(2017),
             yearly_data!(2018),
-        ]
+        ];
+
+        match aggregate_data {
+            AggregateDataProcessing::Full |
+            AggregateDataProcessing::No => {},
+            AggregateDataProcessing::Normalize => {
+                let mut extra = Vec::with_capacity(data.len() * 2);
+                for d in &mut data {
+                    let mut aggregate = std::mem::replace(&mut d.aggregate, Default::default());
+                    extra.push(aggregate.normalize_taking(
+                        AggregateParameter::Average,
+                        format!("{} - {} average ({} dataset)", aggregate.from_year, aggregate.to_year, d.year),
+                        d.stations.clone(),
+                    ));
+                    extra.push(aggregate.normalize_taking(
+                        AggregateParameter::Median,
+                        format!("{} - {} median ({} dataset)", aggregate.from_year, aggregate.to_year, d.year),
+                        d.stations.clone(),
+                    ));
+                }
+                data.extend(extra.into_iter());
+            }
+        }
+
+        data
     }
 }
 
@@ -509,6 +587,6 @@ mod tests {
 
     #[test]
     fn it_works() {
-        YearlyData::all_from_manifest_dir(true);
+        YearlyData::all_from_manifest_dir(AggregateDataProcessing::Full);
     }
 }
