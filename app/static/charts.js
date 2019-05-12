@@ -330,7 +330,8 @@ window.Charts = class Charts {
       input.checked = !data.is_aggregate;
       input.addEventListener("change", e => this.selectedYearChanged(e.target));
       label.appendChild(input);
-      label.classList.add("checked");
+      if (input.checked)
+        label.classList.add("checked");
       label.appendChild(document.createTextNode(data.year));
       yearlyControls.appendChild(label);
     }
