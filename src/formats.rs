@@ -432,12 +432,11 @@ macro_rules! declare_aggregate_data {
                 param: AggregateParameter,
                 year: String,
                 label: String,
-                stations: Vec<Station>,
             ) -> YearlyData {
                 YearlyData {
                     year: label,
                     is_aggregate: Some(year),
-                    stations,
+                    stations: vec![],
 
                     $(
                         $name: {
@@ -606,7 +605,6 @@ impl YearlyData {
                             param.as_human_str(),
                             d.year,
                         ),
-                        d.stations.clone(),
                     ));
                 }
             }
