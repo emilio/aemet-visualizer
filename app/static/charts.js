@@ -780,22 +780,29 @@ window.Charts = class Charts {
     }
 
     {
+      // TODO(emilio): Allow tuning?
+      const kVerticalAxisPoints = 5;
+
       const labels = document.createElementNS(kSvgNs, "g");
       labels.classList.add("y-labels");
 
-      const maxLabel = document.createElementNS(kSvgNs, "text");
-      maxLabel.setAttribute("y", this.axisPadding.top);
-      maxLabel.setAttribute("x", 0);
-      maxLabel.appendChild(document.createTextNode(max.toFixed(2)));
-      labels.appendChild(maxLabel);
+      const availableVerticalSize = this.height - this.axisPadding.bottom - this.axisPadding.top;
+      const verticalIncrement = availableVerticalSize / (kVerticalAxisPoints - 1);
 
-      const minLabel = document.createElementNS(kSvgNs, "text");
-      minLabel.setAttribute("y", this.height - this.axisPadding.bottom);
-      minLabel.setAttribute("x", 0);
-      minLabel.appendChild(document.createTextNode(min.toFixed(2)));
-      labels.appendChild(minLabel);
+      let consumedVerticalSize = this.axisPadding.top;
+      for (let i = 0; i < kVerticalAxisPoints; i++) {
+        const percentage = i / (kVerticalAxisPoints - 1);
+        const label = document.createElementNS(kSvgNs, "text");
+        const value = min + (max - min) * (1.0 - percentage);
 
-      // TODO: y axis labels in the middle?
+        label.setAttribute("x", 0);
+        label.setAttribute("y", consumedVerticalSize);
+        label.appendChild(document.createTextNode(value.toFixed(2)));
+        labels.appendChild(label);
+
+        consumedVerticalSize += verticalIncrement;
+      }
+
       svg.appendChild(labels);
     }
 
