@@ -359,7 +359,7 @@ window.Charts = class Charts {
     const yearlyControls = document.createElement("yearly-controls");
     const perAggregateData = {};
 
-    const addYearlyControl = function(parentNode, data) {
+    const addYearlyControl = (parentNode, data) => {
       const label = document.createElement("label");
       const input = document.createElement("input");
       input.value = data.year;
