@@ -781,7 +781,7 @@ window.Charts = class Charts {
 
     {
       // TODO(emilio): Allow tuning?
-      const kVerticalAxisPoints = 5;
+      const kVerticalAxisPoints = 11;
 
       const labels = document.createElementNS(kSvgNs, "g");
       labels.classList.add("y-labels");
