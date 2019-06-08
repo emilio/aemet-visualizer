@@ -19,6 +19,7 @@
   mode-controls::before,
   yearly-controls::before,
   yearly-aggregate-controls::before,
+  combined-chart-controls::before,
   station-controls::before {
     font-size: 1.5em;
     content: "Yearly controls";
@@ -38,7 +39,10 @@
     content: "Aggregates (" attr(data-aggregate) " dataset)";
     font-size: 1em;
   }
-  mode-controls, yearly-controls, station-controls, metric-controls {
+  combined-chart-controls::before {
+    content: "Combined chart";
+  }
+  combined-chart-controls, mode-controls, yearly-controls, station-controls, metric-controls {
     display: block;
     padding: 10px;
   }
@@ -78,7 +82,7 @@
     fill: currentcolor;
     stroke: none;
   }
-  label, button {
+  label, button, select, input {
     font: inherit;
     display: inline-block;
     padding: 3px;
@@ -113,7 +117,7 @@
     text-anchor: start;
     dominant-baseline: middle;
   }
-  button {
+  button, select, input {
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
@@ -121,16 +125,28 @@
     border-color: #039f7e;
     color: white;
   }
-  button:focus {
+  button:focus, select:focus, input:focus {
     background: #039f7e;
     border-color: #039f7e;
   }
-  button:hover, button:active {
+  button:hover, button:active, select:hover, select:active, input:active {
     background: #01785f;
     border-color: #01785f;
   }
   button::-moz-focus-inner {
     border: none;
+  }
+  combined-chart-controls select,
+  combined-chart-controls input {
+    display: inline-block;
+    margin: 0 5px;
+  }
+  combined-chart-controls label,
+  combined-chart-controls label:hover {
+    display: inline-block;
+    background: none;
+    border: none;
+    color: inherit;
   }
 </style>
 <script src="static/charts.js"></script>

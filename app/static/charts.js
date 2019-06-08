@@ -247,16 +247,18 @@ window.Charts = class Charts {
     this.width = 1200;
     this.height = 600;
     this.axisPadding = {
-      left: 40,
+      left: 60,
       bottom: 40,
-      right: 0,
+      right: 60,
       top: 20,
     };
     this.afterFrameCallback = afterFrameCallback;
     this.dotSize = 5;
     this.stations = {};
     this.charts = {};
+    this.combinedChart = null;
     this.scheduledFrameUpdates = new Set();
+    this.combinedChartNeedsRebuild = false;
     this.animationFrame = 0;
     this.setupStations();
     this.buildControlsAndCharts();
@@ -302,14 +304,25 @@ window.Charts = class Charts {
 
   scheduleRebuildChartForUnit(unit) {
     this.scheduledFrameUpdates.add(unit);
+    this.scheduleFrameUpdate();
+  }
+
+  scheduleCombinedChartRebuild() {
+    this.combinedChartNeedsRebuild = true;
+    this.scheduleFrameUpdate();
+  }
+
+  scheduleFrameUpdate() {
     if (this.animationFrame)
       return;
     this.animationFrame = requestAnimationFrame(() => {
       for (const unit of this.scheduledFrameUpdates)
         this.rebuildChartForUnit(unit);
+      this.maybeRebuildCombinedChart(this.scheduledFrameUpdates, this.combinedChartNeedsRebuild);
       if (this.afterFrameCallback)
         this.afterFrameCallback(this);
       this.scheduledFrameUpdates = new Set();
+      this.combinedChartNeedsRebuild = false;
       this.animationFrame = 0;
     });
   }
@@ -441,6 +454,7 @@ window.Charts = class Charts {
 
     for (const unit in kKnownUnits)
       this.buildControlsAndChartsForUnit(unit);
+    this.buildCombinedChart();
 
     const titlePopup = document.createElement("title-popup");
     titlePopup.style.display = "none";
@@ -528,6 +542,114 @@ window.Charts = class Charts {
 
     this.chartContainer.appendChild(container);
     this.scheduleRebuildChartForUnit(unit);
+  }
+
+  combinedChartUnits() {
+    const left = this.combinedChart.querySelector("select[name=left-unit]");
+    const right = this.combinedChart.querySelector("select[name=right-unit]");
+    return [left.options[left.selectedIndex].value, right.options[right.selectedIndex].value];
+  }
+
+  setStateFromOptions(select, optionValueToSelect, onChange) {
+    for (const option of select.options) {
+      const selected = option.value == optionValueToSelect;
+      if (option.selected == selected)
+        continue;
+      option.selected = selected;
+      onChange(option);
+    }
+  }
+
+  setCombinedChartUnits(units) {
+    if (!units || units.length != 2)
+      return;
+    const left = this.combinedChart.querySelector("select[name=left-unit]");
+    const right = this.combinedChart.querySelector("select[name=right-unit]");
+
+    this.setStateFromOptions(left, units[0], () => this.scheduleCombinedChartRebuild());
+    this.setStateFromOptions(right, units[1], () => this.scheduleCombinedChartRebuild());
+  }
+
+  setCombinedChartRatio(value) {
+    if (!value || this.combinedChartRatio() == value)
+      return;
+    const ratio = this.combinedChart.querySelector("input[name=ratio]");
+    ratio.value = value;
+    this.scheduleCombinedChartRebuild();
+  }
+
+  combinedChartRatio() {
+    return this.combinedChart.querySelector("input[name=ratio]").valueAsNumber || 1.0;
+  }
+
+  maybeRebuildCombinedChart(unitsToRebuild, forceRebuild) {
+    const [leftUnit, rightUnit] = this.combinedChartUnits();
+    if (!forceRebuild && !unitsToRebuild.has(leftUnit) && !unitsToRebuild.has(rightUnit))
+      return;
+    const chart = this.combinedChart.querySelector("chart");
+    while (chart.lastChild)
+      chart.lastChild.remove();
+    if (!leftUnit || !rightUnit)
+      return;
+    const ratio = this.combinedChartRatio();
+    this.rebuildChartForUnit(leftUnit, rightUnit, ratio);
+  }
+
+  buildCombinedChart() {
+    const container = document.createElement("chart-container");
+    this.combinedChart = container;
+
+    const controls = document.createElement("combined-chart-controls");
+    const form = document.createElement("form");
+    form.addEventListener("submit", e => {
+      this.scheduleCombinedChartRebuild();
+      e.preventDefault();
+    });
+    const createSelect = (name, labelText) => {
+      const select = document.createElement("select");
+      select.addEventListener("change", () => this.scheduleCombinedChartRebuild());
+      select.name = name;
+      {
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.appendChild(document.createTextNode(" -- select -- "));
+        select.appendChild(emptyOption);
+      }
+      for (const unit in kKnownUnits) {
+        const option = document.createElement("option");
+        option.value = unit;
+        option.appendChild(document.createTextNode(unit));
+        select.appendChild(option);
+      }
+
+      const label = document.createElement("label");
+      label.appendChild(document.createTextNode(labelText));
+      label.appendChild(select);
+      return label;
+    };
+
+    // TODO(emilio): Add style controls? Bar vs. dots or what not.
+    form.appendChild(createSelect("left-unit", "Left unit"));
+    form.appendChild(createSelect("right-unit", "Right unit"));
+    form.appendChild((() => {
+      const ratio = document.createElement("input");
+      ratio.type = "number";
+      ratio.name = "ratio";
+      ratio.value = "1";
+      ratio.addEventListener("blur", () => this.scheduleCombinedChartRebuild());
+
+      const label = document.createElement("label");
+      label.appendChild(document.createTextNode("Ratio"));
+      label.appendChild(ratio);
+      return label;
+    })());
+
+    controls.appendChild(form);
+    container.appendChild(controls);
+
+    const chart = document.createElement("chart");
+    container.appendChild(chart);
+    this.chartContainer.appendChild(container);
   }
 
   controlInputs(kind) {
@@ -623,8 +745,71 @@ window.Charts = class Charts {
     }
   }
 
-  rebuildChartForUnit(unit) {
-    const container = this.charts[unit];
+  linesForUnit(unit, enabledYears, enabledStations, overlayYears) {
+    let currentYear = 0;
+    const enabledMetrics = this.enabledMetrics(unit);
+    if (enabledMetrics.size == 0)
+      return;
+
+    let loading = false;
+    let min = +Infinity;
+    let max = -Infinity;
+    const lines = {};
+
+    if (unit == "%") {
+      min = 0;
+      max = 100;
+    }
+
+    for (const schemaEntry of this.schema) {
+      if (!enabledYears.has(schemaEntry.year))
+        continue;
+      const data = this.dataFor(schemaEntry.year, unit);
+      if (!data) {
+        loading = true;
+        continue;
+      }
+      for (const m in data) {
+        if (!enabledMetrics.has(m))
+          continue;
+        for (const yearData of data[m]) {
+          const station = yearData.station_id;
+          if (!enabledStations.has(station))
+            continue;
+          for (let currentMonth = 0; currentMonth < kMonths.length; ++currentMonth) {
+            const month = kMonths[currentMonth];
+            let longValue = yearData[month];
+            if (longValue === null)
+              continue;
+            // longValue should either be a number or a WithDate<>.
+            let value = kKnownMetrics[m].with_date ? longValue.value : longValue;
+            if (kKnownMetrics[m].multiplier)
+              value *= kKnownMetrics[m].multiplier;
+            let key = `${kKnownMetrics[m].pretty} - ${this.stations[station].name}`;
+            if (overlayYears)
+              key += ` - ${data.year}`;
+
+            min = Math.min(min, value);
+            max = Math.max(max, value);
+
+            if (!lines[key])
+              lines[key] = [];
+            lines[key].push({
+              year: overlayYears ? 0 : currentYear,
+              month: currentMonth,
+              value,
+              date: longValue.date,
+            });
+          }
+        }
+      }
+      currentYear++;
+    }
+    return { lines, min, max, loading };
+  }
+
+  rebuildChartForUnit(unit, unit2 = undefined, unit2Scale = 1.0) {
+    const container = unit2 ? this.combinedChart : this.charts[unit];
 
     const chart = container.querySelector("chart");
     while (chart.lastChild)
@@ -638,73 +823,36 @@ window.Charts = class Charts {
     if (enabledStations.size == 0)
       return;
 
-    const enabledMetrics = this.enabledMetrics(unit);
-    if (enabledMetrics.size == 0)
-      return;
-
-    let max = -Infinity;
-    let min = Infinity;
-
-    // Special-case for percentages.
-    if (unit == "%") {
-      min = 0;
-      max = 100;
-    }
+    let loading = false;
 
     const overlayYears = this.overlayYears();
-    const lines = {};
-    let loading = false;
-    {
-      let currentYear = 0;
-      for (const schemaEntry of this.schema) {
-        if (!enabledYears.has(schemaEntry.year))
-          continue;
-        const data = this.dataFor(schemaEntry.year, unit);
-        if (!data) {
-          loading = true;
-          continue;
-        }
-        for (const m in data) {
-          if (!enabledMetrics.has(m))
-            continue;
-          for (const yearData of data[m]) {
-            const station = yearData.station_id;
-            if (!enabledStations.has(station))
-              continue;
-            for (let currentMonth = 0; currentMonth < kMonths.length; ++currentMonth) {
-              const month = kMonths[currentMonth];
-              let longValue = yearData[month];
-              if (longValue === null)
-                continue;
-              // longValue should either be a number or a WithDate<>.
-              let value = kKnownMetrics[m].with_date ? longValue.value : longValue;
-              if (kKnownMetrics[m].multiplier)
-                value *= kKnownMetrics[m].multiplier;
-              min = Math.min(min, value);
-              max = Math.max(max, value);
-              let key = `${kKnownMetrics[m].pretty} - ${this.stations[station].name}`;
-              if (overlayYears)
-                key += ` - ${data.year}`;
 
-              if (!lines[key])
-                lines[key] = [];
-              lines[key].push({
-                year: overlayYears ? 0 : currentYear,
-                month: currentMonth,
-                value,
-                date: longValue.date,
-              });
-            }
-          }
-        }
-        currentYear++;
-      }
-    }
+    const unitMetadata = this.linesForUnit(unit, enabledYears, enabledStations, overlayYears);
+    let unit2Metadata = undefined;
+    if (unit2)
+      unit2Metadata = this.linesForUnit(unit2, enabledYears, enabledStations, overlayYears);
 
-    if (loading)
+    if (!unitMetadata || (unit2 && !unit2Metadata))
+      return;
+
+    if (unitMetadata.loading || (unit2Metadata && unit2Metadata.loading))
       chart.classList.add("loading");
     else
       chart.classList.remove("loading");
+
+    // If we're displaying two units, we need at least one common point, which
+    // is going to be the zero, and we need to adjust the scale so that the max
+    // and min end up lined up with the zero being the same in both scales.
+    if (unit2) {
+      for (const meta of [unitMetadata, unit2Metadata]) {
+        meta.min = Math.min(0, meta.min);
+        meta.max = Math.max(0, meta.max);
+      }
+      unitMetadata.max = Math.max(unitMetadata.max, unit2Metadata.max / unit2Scale);
+      unitMetadata.min = Math.min(unitMetadata.min, unit2Metadata.min / unit2Scale);
+      unit2Metadata.max = Math.max(unit2Metadata.max, unitMetadata.max * unit2Scale);
+      unit2Metadata.min = Math.min(unit2Metadata.min, unitMetadata.min * unit2Scale);
+    }
 
     const svg = document.createElementNS(kSvgNs, "svg");
     svg.setAttribute("width", this.width);
@@ -715,37 +863,54 @@ window.Charts = class Charts {
       const xAxis = document.createElementNS(kSvgNs, "g");
       xAxis.classList.add("x-axis");
 
-      const xLine = document.createElementNS(kSvgNs, "line");
-      xLine.setAttribute("x1", this.axisPadding.left)
-      xLine.setAttribute("x2", this.width - this.axisPadding.right)
+      {
+        const xLine = document.createElementNS(kSvgNs, "line");
+        xLine.setAttribute("x1", this.axisPadding.left)
+        xLine.setAttribute("x2", this.width - this.axisPadding.right)
 
-      xLine.setAttribute("y1", this.height - this.axisPadding.bottom)
-      xLine.setAttribute("y2", this.height - this.axisPadding.bottom)
+        xLine.setAttribute("y1", this.height - this.axisPadding.bottom)
+        xLine.setAttribute("y2", this.height - this.axisPadding.bottom)
 
-      xAxis.appendChild(xLine);
+        xAxis.appendChild(xLine);
+        svg.appendChild(xAxis);
+      }
 
-      const yAxis = document.createElementNS(kSvgNs, "g");
-      yAxis.classList.add("y-axis");
+      {
+        const yAxis = document.createElementNS(kSvgNs, "g");
+        yAxis.classList.add("y-axis");
 
-      const yLine = document.createElementNS(kSvgNs, "line");
-      yLine.setAttribute("x1", this.axisPadding.left)
-      yLine.setAttribute("x2", this.axisPadding.left)
+        const yLine = document.createElementNS(kSvgNs, "line");
+        yLine.setAttribute("x1", this.axisPadding.left)
+        yLine.setAttribute("x2", this.axisPadding.left)
 
-      yLine.setAttribute("y1", this.axisPadding.top);
-      yLine.setAttribute("y2", this.height - this.axisPadding.bottom)
+        yLine.setAttribute("y1", this.axisPadding.top);
+        yLine.setAttribute("y2", this.height - this.axisPadding.bottom)
+        yAxis.appendChild(yLine);
+        svg.appendChild(yAxis);
+      }
 
-      yAxis.appendChild(yLine);
 
-      svg.appendChild(xAxis);
-      svg.appendChild(yAxis);
+      if (unit2) {
+        const yAxis = document.createElementNS(kSvgNs, "g");
+        yAxis.classList.add("y-axis");
+        yAxis.classList.add("y-axis-second-unit");
+
+        const yLine = document.createElementNS(kSvgNs, "line");
+        yLine.setAttribute("x1", this.width - this.axisPadding.right)
+        yLine.setAttribute("x2", this.width - this.axisPadding.right)
+
+        yLine.setAttribute("y1", this.axisPadding.top);
+        yLine.setAttribute("y2", this.height - this.axisPadding.bottom)
+        yAxis.appendChild(yLine);
+        svg.appendChild(yAxis);
+      }
     }
 
     const availWidth = this.width - this.axisPadding.left - this.axisPadding.right;
     const availHeight = this.height - this.axisPadding.top - this.axisPadding.bottom;
-    const yRange = max - min;
 
-    const sizePerYear = overlayYears ? availWidth : availWidth / enabledYears.size;
-    const sizePerMonth = sizePerYear / kMonths.length;
+    const monthCount = overlayYears ? kMonths.length : enabledYears.size * kMonths.length;
+    const sizePerMonth = availWidth / (monthCount - 1);
 
     {
       // The x axis labels.
@@ -779,23 +944,40 @@ window.Charts = class Charts {
       svg.appendChild(labels);
     }
 
-    {
-      // TODO(emilio): Allow tuning?
-      const kVerticalAxisPoints = 11;
+    let lineIndex = 0;
+    for (const meta of [unitMetadata, unit2Metadata]) {
+      if (!meta)
+        continue;
+
+      const kVerticalAxisPoints = 11; // TODO(emilio): Allow tuning?
+      const {min, max, lines} = meta;
+      console.log(meta);
+      const yRange = max - min;
 
       const labels = document.createElementNS(kSvgNs, "g");
       labels.classList.add("y-labels");
+      let x = 0;
+      if (meta == unit2Metadata) {
+        x = this.width - this.axisPadding.right;
+        labels.classList.add("y-labels-second-unit");
+      }
 
       const availableVerticalSize = this.height - this.axisPadding.bottom - this.axisPadding.top;
       const verticalIncrement = availableVerticalSize / (kVerticalAxisPoints - 1);
 
       let consumedVerticalSize = this.axisPadding.top;
+      let sawZero = false;
       for (let i = 0; i < kVerticalAxisPoints; i++) {
         const percentage = i / (kVerticalAxisPoints - 1);
         const label = document.createElementNS(kSvgNs, "text");
-        const value = min + (max - min) * (1.0 - percentage);
+        const value = min + yRange * (1.0 - percentage);
 
-        label.setAttribute("x", 0);
+        // TODO(emilio): Perhaps we should also skip showing the current point
+        // if it's very close to zero.
+        if (value == 0)
+          sawZero = true;
+
+        label.setAttribute("x", x);
         label.setAttribute("y", consumedVerticalSize);
         label.appendChild(document.createTextNode(value.toFixed(2)));
         labels.appendChild(label);
@@ -803,14 +985,21 @@ window.Charts = class Charts {
         consumedVerticalSize += verticalIncrement;
       }
 
-      svg.appendChild(labels);
-    }
+      // We want to always display the zero if comparing.
+      if (unit2 && !sawZero) {
+        const zero = ((yRange - max) / yRange);
+        const label = document.createElementNS(kSvgNs, "text");
+        label.setAttribute("x", x);
+        label.setAttribute("y", (1.0 - zero) * availableVerticalSize + this.axisPadding.top);
+        label.appendChild(document.createTextNode("0"));
+        labels.appendChild(label);
+      }
 
-    {
+      svg.appendChild(labels);
+
       const pointContainer = document.createElementNS(kSvgNs, "g");
       pointContainer.classList.add("points");
 
-      let lineIndex = 0;
       for (const lineKey in lines) {
         const points = lines[lineKey];
         const line = document.createElementNS(kSvgNs, "polyline");
@@ -818,7 +1007,7 @@ window.Charts = class Charts {
         const color = kLineColors[lineIndex++ % kLineColors.length];
         for (const point of points) {
           const circle = document.createElementNS(kSvgNs, "circle");
-          const x = this.axisPadding.left + point.year * sizePerYear + point.month * sizePerMonth;
+          const x = this.axisPadding.left + (point.year * kMonths.length + point.month) * sizePerMonth;
           const y = this.axisPadding.top + (1 - ((point.value - min) / yRange)) * availHeight;
           circle.style.color = color;
           circle.setAttribute("cx", x);
@@ -852,6 +1041,10 @@ window.Charts = class Charts {
           units[unit] = Array.from(this.enabledMetrics(unit));
         return units;
       })(),
+      combined: {
+        units: this.combinedChartUnits(),
+        ratio: this.combinedChartRatio(),
+      },
     };
   }
 
@@ -865,6 +1058,10 @@ window.Charts = class Charts {
     if (state.units)
       for (const unit in state.units)
         this.setEnabledMetrics(unit, state.units[unit]);
+    if (state.combined) {
+      this.setCombinedChartUnits(state.combined.units);
+      this.setCombinedChartRatio(state.combined.ratio);
+    }
   }
 };
 
