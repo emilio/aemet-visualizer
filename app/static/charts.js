@@ -808,6 +808,13 @@ window.Charts = class Charts {
     return { lines, min, max, loading };
   }
 
+  downloadChart(e) {
+    const data = e.target.parentNode.querySelector("svg").outerHTML;
+    const svg = new Blob([data], {type: "image/svg+xml;charset=utf-8"});
+    const url = URL.createObjectURL(svg);
+    e.target.href = url;
+  }
+
   rebuildChartForUnit(unit, unit2 = undefined, unit2Scale = 1.0) {
     const container = unit2 ? this.combinedChart : this.charts[unit];
 
@@ -854,9 +861,35 @@ window.Charts = class Charts {
       unit2Metadata.min = Math.min(unit2Metadata.min, unitMetadata.min * unit2Scale);
     }
 
+    const createDownloadButton = (text, download) => {
+      const button = document.createElement("a");
+      button.classList.add("download-button");
+      button.href = "#";
+      button.target = "_blank";
+      if (download)
+        button.download = download;
+      button.appendChild(document.createTextNode(text));
+      button.addEventListener("click", (e) => this.downloadChart(e));
+      return button;
+    };
+
+    chart.appendChild(createDownloadButton("Open in new tab"));
+    chart.appendChild(createDownloadButton("Download", "graph.svg"));
+
     const svg = document.createElementNS(kSvgNs, "svg");
+    svg.setAttribute("font-size", "12px");
+    svg.setAttribute("font-family", "sans");
+    svg.setAttribute("viewbox", "0 0 " + this.width + " " + this.height);
+    svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     svg.setAttribute("width", this.width);
     svg.setAttribute("height", this.height);
+
+    const createLine = function() {
+      const line = document.createElementNS(kSvgNs, "line");
+      line.setAttribute("stroke-width", "1px");
+      line.setAttribute("stroke", "lightgrey");
+      return line;
+    }
 
     // Add two axes.
     {
@@ -864,7 +897,7 @@ window.Charts = class Charts {
       xAxis.classList.add("x-axis");
 
       {
-        const xLine = document.createElementNS(kSvgNs, "line");
+        const xLine = createLine();
         xLine.setAttribute("x1", this.axisPadding.left)
         xLine.setAttribute("x2", this.width - this.axisPadding.right)
 
@@ -879,7 +912,7 @@ window.Charts = class Charts {
         const yAxis = document.createElementNS(kSvgNs, "g");
         yAxis.classList.add("y-axis");
 
-        const yLine = document.createElementNS(kSvgNs, "line");
+        const yLine = createLine();
         yLine.setAttribute("x1", this.axisPadding.left)
         yLine.setAttribute("x2", this.axisPadding.left)
 
@@ -895,7 +928,7 @@ window.Charts = class Charts {
         yAxis.classList.add("y-axis");
         yAxis.classList.add("y-axis-second-unit");
 
-        const yLine = document.createElementNS(kSvgNs, "line");
+        const yLine = createLine();
         yLine.setAttribute("x1", this.width - this.axisPadding.right)
         yLine.setAttribute("x2", this.width - this.axisPadding.right)
 
@@ -921,6 +954,8 @@ window.Charts = class Charts {
 
       let appendLabel = content => {
         const text = document.createElementNS(kSvgNs, "text");
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dominant-baseline", "middle");
         text.setAttribute("y", this.height - this.axisPadding.bottom / 2);
         text.setAttribute("x", consumedSize);
         text.appendChild(document.createTextNode(content));
@@ -967,9 +1002,15 @@ window.Charts = class Charts {
 
       let consumedVerticalSize = this.axisPadding.top;
       let sawZero = false;
+      const createYAxisLabel = function() {
+        const label = document.createElementNS(kSvgNs, "text");
+        label.setAttribute("text-anchor", "start");
+        label.setAttribute("dominant-baseline", "middle");
+        return label;
+      };
       for (let i = 0; i < kVerticalAxisPoints; i++) {
         const percentage = i / (kVerticalAxisPoints - 1);
-        const label = document.createElementNS(kSvgNs, "text");
+        const label = createYAxisLabel();
         const value = min + yRange * (1.0 - percentage);
 
         // TODO(emilio): Perhaps we should also skip showing the current point
@@ -988,7 +1029,7 @@ window.Charts = class Charts {
       // We want to always display the zero if comparing.
       if (unit2 && !sawZero) {
         const zero = ((yRange - max) / yRange);
-        const label = document.createElementNS(kSvgNs, "text");
+        const label = createYAxisLabel();
         label.setAttribute("x", x);
         label.setAttribute("y", (1.0 - zero) * availableVerticalSize + this.axisPadding.top);
         label.appendChild(document.createTextNode("0"));
@@ -1009,7 +1050,8 @@ window.Charts = class Charts {
           const circle = document.createElementNS(kSvgNs, "circle");
           const x = this.axisPadding.left + (point.year * kMonths.length + point.month) * sizePerMonth;
           const y = this.axisPadding.top + (1 - ((point.value - min) / yRange)) * availHeight;
-          circle.style.color = color;
+          circle.setAttribute("fill", color);
+          circle.setAttribute("stroke", "none");
           circle.setAttribute("cx", x);
           circle.setAttribute("cy", y);
           circle.setAttribute("r", this.dotSize / 2);
@@ -1022,7 +1064,8 @@ window.Charts = class Charts {
         }
         line.setAttribute("points", pointsAttr.join(" "));
         line.setAttribute("title", lineKey);
-        line.style.color = color;
+        line.setAttribute("stroke", color);
+        line.setAttribute("fill", "none");
         pointContainer.insertBefore(line, pointContainer.firstChild);
       }
       svg.appendChild(pointContainer);

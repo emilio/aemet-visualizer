@@ -74,16 +74,9 @@
     padding: 3px;
     border-radius: 3px;
   }
-  polyline {
-    fill: none;
-    stroke: currentcolor;
-  }
-  circle {
-    fill: currentcolor;
-    stroke: none;
-  }
-  label, button, select, input {
+  label, button, select, input, .download-button {
     font: inherit;
+    text-decoration: none;
     display: inline-block;
     padding: 3px;
     margin: 3px;
@@ -104,20 +97,7 @@
     visibility: hidden;
     position: absolute;
   }
-  .x-axis line,
-  .y-axis line {
-    stroke-width: 1px;
-    stroke: lightgrey;
-  }
-  .x-labels text {
-    text-anchor: middle;
-    dominant-baseline: middle;
-  }
-  .y-labels text {
-    text-anchor: start;
-    dominant-baseline: middle;
-  }
-  button, select, input {
+  button, select, input, .download-button {
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
@@ -125,16 +105,23 @@
     border-color: #039f7e;
     color: white;
   }
-  button:focus, select:focus, input:focus {
+  button:focus, select:focus, input:focus, .download-button:focus {
     background: #039f7e;
     border-color: #039f7e;
   }
-  button:hover, button:active, select:hover, select:active, input:active {
+  button:hover, button:active, select:hover, select:active, input:active, .download-button:hover {
     background: #01785f;
     border-color: #01785f;
   }
   button::-moz-focus-inner {
     border: none;
+  }
+  .download-button {
+    opacity: 0;
+    transition: opacity .5s ease;
+  }
+  chart:hover .download-button {
+    opacity: 1;
   }
   combined-chart-controls select,
   combined-chart-controls input {
