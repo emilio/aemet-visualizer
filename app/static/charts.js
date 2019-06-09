@@ -813,6 +813,7 @@ window.Charts = class Charts {
     const svg = new Blob([data], {type: "image/svg+xml;charset=utf-8"});
     const url = URL.createObjectURL(svg);
     e.target.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   rebuildChartForUnit(unit, unit2 = undefined, unit2Scale = 1.0) {
