@@ -19,6 +19,7 @@
   mode-controls::before,
   yearly-controls::before,
   yearly-aggregate-controls::before,
+  style-controls::before,
   combined-chart-controls::before,
   station-controls::before {
     font-size: 1.5em;
@@ -32,6 +33,9 @@
   mode-controls::before {
     content: "Mode controls";
   }
+  style-controls::before {
+    content: "Style controls";
+  }
   station-controls::before {
     content: "Station controls";
   }
@@ -42,7 +46,7 @@
   combined-chart-controls::before {
     content: "Combined chart";
   }
-  combined-chart-controls, mode-controls, yearly-controls, station-controls, metric-controls {
+  combined-chart-controls, mode-controls, yearly-controls, station-controls, metric-controls, style-controls {
     display: block;
     padding: 10px;
   }
@@ -106,8 +110,8 @@
     color: white;
   }
   button:focus, select:focus, input:focus, .download-button:focus {
-    background: #039f7e;
-    border-color: #039f7e;
+    background: #006651;
+    border-color: #006651;
   }
   button:hover, button:active, select:hover, select:active, input:active, .download-button:hover {
     background: #01785f;
@@ -123,11 +127,14 @@
   chart:hover .download-button {
     opacity: 1;
   }
+  style-controls input,
   combined-chart-controls select,
   combined-chart-controls input {
     display: inline-block;
     margin: 0 5px;
   }
+  style-controls label,
+  style-controls label:hover,
   combined-chart-controls label,
   combined-chart-controls label:hover {
     display: inline-block;

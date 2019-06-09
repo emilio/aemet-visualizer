@@ -237,6 +237,9 @@ const kKnownUnits = (function() {
   return units;
 })();
 
+const kDefaultDotRadius = 2.5;
+const kDefaultLineThickness = 1;
+
 window.Charts = class Charts {
   constructor(chartContainer, controls, schema, afterFrameCallback) {
     this.chartContainer = chartContainer;
@@ -253,7 +256,6 @@ window.Charts = class Charts {
       top: 20,
     };
     this.afterFrameCallback = afterFrameCallback;
-    this.dotSize = 5;
     this.stations = {};
     this.charts = {};
     this.combinedChart = null;
@@ -448,9 +450,37 @@ window.Charts = class Charts {
       }
     }
 
+    const styleControls = document.createElement("style-controls");
+    {
+      const createNumberControl = (name, labelText, defaultValue) => {
+        const input = document.createElement("input");
+        input.name = name;
+        input.type = "number";
+        input.step = "0.1"
+        input.value = defaultValue;
+        input.addEventListener("blur", () => this.scheduleRebuildAllCharts());
+        const label = document.createElement("label");
+        label.appendChild(document.createTextNode(labelText));
+        label.appendChild(input);
+        return label;
+      }
+
+      const thickness = createNumberControl("line-thickness", "Line thickness", kDefaultLineThickness);
+      const dotRadius = createNumberControl("dot-radius", "Dot radius", kDefaultDotRadius);
+      const form = document.createElement("form");
+      form.addEventListener("submit", e => {
+        e.preventDefault();
+        this.scheduleRebuildAllCharts();
+      });
+      form.appendChild(thickness);
+      form.appendChild(dotRadius);
+      styleControls.appendChild(form);
+    }
+
     this.controls.appendChild(yearlyControls);
     this.controls.appendChild(modeControls);
     this.controls.appendChild(stationControls);
+    this.controls.appendChild(styleControls);
 
     for (const unit in kKnownUnits)
       this.buildControlsAndChartsForUnit(unit);
@@ -743,6 +773,40 @@ window.Charts = class Charts {
       }
       return;
     }
+  }
+
+  dotRadiusInput() {
+    return this.controls.querySelector("style-controls").querySelector("input[name=dot-radius]");
+  }
+
+  dotRadius() {
+    return this.dotRadiusInput().valueAsNumber || kDefaultDotRadius;
+  }
+
+  setDotRadius(radius) {
+    if (radius === undefined)
+      radius = kDefaultDotRadius;
+    if (this.dotRadius() == radius)
+      return;
+    this.dotRadiusInput().value = radius;
+    this.scheduleRebuildAllCharts();
+  }
+
+  lineThicknessInput() {
+    return this.controls.querySelector("style-controls").querySelector("input[name=line-thickness]");
+  }
+
+  lineThickness() {
+    return this.lineThicknessInput().valueAsNumber || kDefaultLineThickness;
+  }
+
+  setLineThickness(thickness) {
+    if (thickness === undefined)
+      thickness = kDefaultLineThickness;
+    if (this.lineThickness() == thickness)
+      return;
+    this.lineThicknessInput().value = thickness;
+    this.scheduleRebuildAllCharts();
   }
 
   linesForUnit(unit, enabledYears, enabledStations, overlayYears) {
@@ -1042,6 +1106,8 @@ window.Charts = class Charts {
       const pointContainer = document.createElementNS(kSvgNs, "g");
       pointContainer.classList.add("points");
 
+      const dotRadius = this.dotRadius();
+      const lineThickness = this.lineThickness();
       for (const lineKey in lines) {
         const points = lines[lineKey];
         const line = document.createElementNS(kSvgNs, "polyline");
@@ -1055,7 +1121,7 @@ window.Charts = class Charts {
           circle.setAttribute("stroke", "none");
           circle.setAttribute("cx", x);
           circle.setAttribute("cy", y);
-          circle.setAttribute("r", this.dotSize / 2);
+          circle.setAttribute("r", dotRadius);
           let title = `${lineKey} - ${kMonths[point.month]} - ${point.value}`;
           if (point.date)
             title += ` - (date: ${point.date})`;
@@ -1066,6 +1132,7 @@ window.Charts = class Charts {
         line.setAttribute("points", pointsAttr.join(" "));
         line.setAttribute("title", lineKey);
         line.setAttribute("stroke", color);
+        line.setAttribute("stroke-width", lineThickness);
         line.setAttribute("fill", "none");
         pointContainer.insertBefore(line, pointContainer.firstChild);
       }
@@ -1079,6 +1146,10 @@ window.Charts = class Charts {
       enabledYears: Array.from(this.enabledYears()),
       enabledStations: Array.from(this.enabledStations()),
       mode: this.selectedMode(),
+      style: {
+        lineThickness: this.lineThickness(),
+        dotRadius: this.dotRadius(),
+      },
       units: (() => {
         const units = {};
         for (const unit in kKnownUnits)
@@ -1095,6 +1166,10 @@ window.Charts = class Charts {
   setState(state) {
     if (state.mode)
       this.setSelectedMode(state.mode);
+    if (state.style) {
+      this.setLineThickness(state.style.lineThickness);
+      this.setDotRadius(state.style.dotRadius);
+    }
     if (Array.isArray(state.enabledYears))
       this.setEnabledYears(state.enabledYears);
     if (Array.isArray(state.enabledStations))
