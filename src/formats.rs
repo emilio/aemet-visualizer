@@ -559,7 +559,7 @@ impl YearlyData {
                     },
                 }
             }
-        };
+        }
 
         enumerate_record_kinds!(read)
     }
